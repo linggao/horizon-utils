@@ -1,0 +1,25 @@
+{
+  "sensor_url": "https://bluehorizon.network/documentation/cputemp-device-api",
+  "sensor_name": "cputemp",
+  "attributes": [
+    {
+      "id": "app",
+      "short_type": "mapped",
+      "label": "app",
+      "publishable": true,
+      "mappings": {
+        "MTN_CPU_TEMP": "true"
+      }
+    },
+    {
+      "id": "compute",
+      "short_type": "compute",
+      "label": "Compute Resources",
+      "publishable": true,
+      "mappings": {
+        "ram": 128,
+        "cpus": 1
+      }
+    }
+  ]
+}

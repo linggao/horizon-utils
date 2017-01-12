@@ -1,0 +1,698 @@
+#!/bin/bash
+
+# This command is a command line version of the service registration for bluehorizon.
+# This script registers the workload (service) with anax. It also performs the necessary tasks 
+# like registering the user and the device on the exchange if needed. 
+# The environmental variable file defines all the variables needed to run this script, it must be updated
+# before running this command.
+# Usage:
+#     reg_all -h
+#     reg_all -f env_vars_fn  (-f specifies the envionmental variable file name)
+#     reg_all   (use the default environmental variable file /var/horizon/reg/env_vars)
+#
+
+# return code
+RC_SUCCESS=0
+RC_ENV_NOT_DEFINED=101
+RC_FAILED_CREATE_USER_EXCH=102
+RC_FAILED_CREATE_DEVICE_EXCH=103
+RC_FAILED_DELETE_DEVICE_EXCH=104
+RC_FAILED_GET_DEVICE_INFO_ANAX=105
+RC_FAILED_CREATE_DEVICE_ANAX=106
+RC_FAILED_UPDATE_DEVICE_ANAX=107
+RC_FAILED_REG_SERVICE_ATTRIBS_ANAX=108
+RC_FAILED_REG_SERVICE_ANAX=109
+RC_FAILED_REG_SERVICE_ANAX=110
+RC_FAILED_GET_LOCATION=111
+RC_USER_MISMATCH=112
+RC_BAD_PARAM=113
+
+RC_REREG_NOT_SUPPORT_USER_CHANGE=120
+RC_NOT_SUPPORT_DEVICE_CHANGE=121
+RC_ANAX_NOT_RUNNING=130
+
+
+content="-H Content-Type:application/json"
+curlBasicArgs="-s -w %{http_code} -H Accept:application/json"
+
+
+#####
+# This function displays the usage for this command
+usage()
+{
+    echo "Usage: reg_all [-f env_vars_fn]
+
+Registers your horizon username, device, and the services you want it to run. 
+This is an alternative to running the horizon registration UI. Update the 
+env_vars file with your desired settings before running this command. After
+running this command, the horizon agreement bots will negotiate agreements with 
+your device to run the services.
+
+Options:
+   -f <env_vars_fn>  A file containing the environmental variables that reg_all
+                     should use. The default is /var/horizon/reg/env_vars.
+                     You must update this file with correct information before 
+                     running this command.
+    "
+}
+
+
+#####
+# This function displays the values of some variables
+disp_env_vars()
+{
+    echo "EXCH=$EXCH"
+    echo "ANAX_API=$ANAX_API"
+    echo "USER=$USER, PASSWORD=$PASSWORD, EMAIL=$EMAIL"
+    echo "DEVICE_ID=$DEVICE_ID, DEVICE_NAME=$DEVICE_NAME, DEVICE_TOKEN=$DEVICE_TOKEN"
+    echo "SERVICES=$SERVICES"
+    echo "REREG=$REREG"
+    echo "SERVICES_TO_ADD=$SERVICES_TO_ADD"
+    echo "SERVICES_TO_DEL=$SERVICES_TO_DEL"
+}
+
+
+###
+# This function displays how to change the device id and restart horizon.
+display_change_device_and_restart()
+{
+    echo "  mkdir -p /tmp/horizon; cp /var/snap/bluehorizon/common/config/* /tmp/horizon"
+    echo "  snap remove bluehorizon"
+    echo "  mkdir -p /var/snap/bluehorizon/common/config/; cp /tmp/horizon/* /var/snap/bluehorizon/common/config/"
+    echo "  (modify /var/snap/bluehorizon/common/config/device_id file)"
+
+    directory_ver=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_DIRECTORY_VERSION |sed 's/CMTN_DIRECTORY_VERSION=//')
+    if [[ $directory_ver == "999" ]]; then
+        echo "  snap install --devmode --edge bluehorizon"
+    else
+        echo "  snap install --devmode --beta bluehorizon"
+    fi
+
+    echo "  rm -Rf /tmp/horizon"
+    echo "  reg_all $ALL_PARAMES"
+}
+
+
+#####
+# This function parses the first parameter which is a json structure + a number.
+# It matches the number with the second parameter. The function reterns true if
+# the two numbers qual, otherwise false.
+check_status_code() 
+{
+    http_ret=$1
+    exp_code=$2
+
+    rc=$(echo $http_ret | sed 's/.*}\([0-9]*\)$/\1/')
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo $rc,$exp_code 
+    fi
+    if [ $rc -eq $exp_code ]; then
+        return 0 # 0 = true
+    else
+        return 1 # 1 = false
+    fi
+}
+
+
+#####
+# This function returns parses the input string which is a json + number. 
+# It returns the json part.
+get_message()
+{
+    msg=`echo $1 | sed 's/\(.*}\)\([0-9]*\)$/\1/'`
+    echo $msg
+}
+
+
+#####
+# This function registers the user to to exchange if the user does not exists. 
+reg_user() {
+    # check if the user existes or not
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "curl -X POST $curlBasicArgs -H \"Authorization:Basic ${USER}:${PASSWORD}\" \"$EXCH/users/${USER}/confirm\""
+    fi
+    ret=$(curl -X POST $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/users/${USER}/confirm")
+    if check_status_code "$ret" 201; then
+        echo "The user $USER with password $PASSWORD already exists."
+        return $RC_SUCCESS
+    fi
+
+    # create the user
+    echo "The user $USER does not exist, will create it."
+    read -d '' user <<EOF
+    {  
+        "password": "$PASSWORD",
+        "email": "$EMAIL"
+    }
+EOF
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "echo '$user' | curl $curlBasicArgs -X POST $content --data @- \"$EXCH/users/${USER}\""
+    fi
+    ret=$(echo "$user" | curl $curlBasicArgs -X POST $content --data @- "$EXCH/users/${USER}")
+    if check_status_code "$ret" 201; then
+        echo "User $USER with password $PASSWORD created"
+        return $RC_SUCCESS
+    else
+        echo "Failed to create user $USER with password $PASSWORD : " $( get_message "$ret" )
+        return $RC_FAILED_CREATE_USER_EXCH
+    fi
+}
+
+
+#####
+# This function registers the device to the echange. If the device with the same id exists,
+# this function will delete the device from the exchange and then create a new device with
+# the same id. However, for re-registration, this fuction will not delete the device, it will
+# just update the token for the device.
+reg_device_to_exchange() 
+{
+    # check if we have all the necessary environmental variables defined
+    if [[ -z $DEVICE_ID ]]; then
+        echo "Please make sure DEVICE_ID is defined in $ENV_VARS_FILE_NAME."
+        return $RC_ENV_NOT_DEFINED
+    fi 
+
+    # check if the device existes or not
+    device_exists=0
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "curl -X GET $curlBasicArgs -H \"Authorization:Basic ${USER}:${PASSWORD}\" \"$EXCH/devices/${DEVICE_ID}\""
+    fi
+    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
+    if check_status_code "$ret" 200; then
+        owner=$(get_message "$ret" | jq ".devices.\"$DEVICE_ID\".owner")
+        owner=$(echo ${owner//\"/}) # remove quotes
+        if [[ $owner != "$USER" ]]; then
+            # device owner does not match current user
+            echo "The device ($DEVICE_ID) owner $owner does not match the current user $USER."
+            echo "Please modify the USER variable in the $ENV_VARS_FILE_NAME file and rerun this command."
+            echo "Or use a new device id for the device, restart the bluehorizon snap and rerun this command by doing the following: "
+            display_change_device_and_restart
+            return $RC_USER_MISMATCH
+        fi
+
+        device_exists=1
+        if [[ $REREG -eq 0 ]]; then
+            echo "The device $DEVICE_ID already exists, will delete it."
+            if [[ $VERBOSE -eq 1 ]]; then
+                echo "curl -X DELETE $curlBasicArgs -H \"Authorization:Basic ${USER}:${PASSWORD}\" \"$EXCH/devices/${DEVICE_ID}\""
+            fi
+            ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
+            if ! check_status_code "$ret" 204; then
+                echo "Failed to delete the device $DEVICE_ID from the exchange. " $(get_message "$ret")
+                return $RC_FAILED_DELETE_DEVICE_EXCH
+            else
+                echo "Device $DEVICE_ID deleted."
+            fi
+            device_exists=0
+        fi
+    fi
+
+    if [[ $device_exists -eq 0 ]]; then 
+        # create the device
+        read -d '' device <<EOF
+        {
+            "token": "$DEVICE_TOKEN",
+            "name": "$DEVICE_NAME",
+            "registeredMicroservices": [],
+            "msgEndPoint": "",
+            "softwareVersions": {}
+        }
+EOF
+    # the exchange does not support token update yet.
+    # elif [[ $REREG -eq 1 ]]; then
+    #    # for re-registration update the token if the device exists
+    #    read -d '' device <<EOF
+    #    {
+    #        "token": "$DEVICE_TOKEN",
+    #        "name": "$DEVICE_NAME"
+    #    }
+    #EOF
+
+        if [[ $VERBOSE -eq 1 ]]; then
+            echo "echo '$device' | curl -X PUT $curlBasicArgs $content -H \"Authorization:Basic ${USER}:${PASSWORD}\" --data @- \"$EXCH/devices/${DEVICE_ID}\""
+        fi
+        ret=$(echo "$device" | curl -X PUT $curlBasicArgs $content -H "Authorization:Basic ${USER}:${PASSWORD}" --data @- "$EXCH/devices/${DEVICE_ID}")
+        if check_status_code "$ret" 201; then
+            echo "Device $DEVICE_ID with token $DEVICE_TOKEN created/updated"
+            return $RC_SUCCESS
+        else
+            echo "Failed to create device $DEVICE_ID with token $DEVICE_TOKEN: " $( get_message "$ret" )
+            return $RC_FAILED_CREATE_DEVICE_EXCH
+        fi
+    fi
+
+    return $RC_SUCCESS
+}
+
+
+#####
+# This function calls anax /horizondevice api to save the new device id and token for the user accound. 
+reg_device_to_anax()
+{
+    if [[ $REREG -eq 0 ]]; then
+        # check if we have all the necessary environmental variables defined
+        if [[ -z $DEVICE_ID ]] || [[ -z $DEVICE_NAME ]] || [[ -z $DEVICE_TOKEN ]]; then
+            echo "Please make sure DEVICE_ID, DEVICE_NAME and DEVICE_TOKEN are defined in $ENV_VARS_FILE_NAME."
+            return $RC_ENV_NOT_DEFINED
+        fi 
+
+        # create a new horizondevice account
+        read -d '' newhzndevice <<EOF
+        {
+            "account": {
+                "id": "$USER",
+                "email": "$EMAIL"
+            },
+            "id": "$DEVICE_ID",
+            "name": "$DEVICE_NAME",
+            "token": "$DEVICE_TOKEN"
+        }
+EOF
+        if [[ $VERBOSE -eq 1 ]]; then
+            echo "echo '$newhzndevice' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/horizondevice\""
+        fi
+        ret=$(echo "$newhzndevice" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/horizondevice")
+        if check_status_code "$ret" 201; then
+            echo "Device info created in anax for device $DEVICE_ID with token $DEVICE_TOKEN."
+            rc=$RC_SUCCESS
+        else
+            echo "Failed to create the device info in anax for device $DEVICE_ID with token $DEVICE_TOKEN: " $( get_message "$ret" )
+            rc=$RC_FAILED_CREATE_DEVICE_ANAX
+        fi
+    else
+        # the horizondevice account has been created, update it with new device id and token. 
+        read -d '' updatehzntoken <<EOF
+        {
+            "account": {
+            "id": "$USER"
+            },
+            "name": "$DEVICE_NAME",
+            "token": "$DEVICE_TOKEN"
+        }
+EOF
+    #    echo "anax does not support token update yet."
+    #    if [[ $VERBOSE -eq 1 ]]; then
+    #        echo -e "\n[D] hzntoken payload: $updatehzntoken"
+    #    fi
+
+    #    if [[ $VERBOSE -eq 1 ]]; then
+    #        echo "echo '$updatehzntoken' | curl -X PATCH $curlBasicArgs --data @- \"$ANAX_API/horizondevice\""
+    #    fi
+    #    ret=$(echo "$updatehzntoken" | curl -X PATCH $curlBasicArgs --data @- "$ANAX_API/horizondevice")
+    #    if check_status_code "$ret" 200; then
+    #        echo "Device info updated in anax for device $DEVICE_ID with token $DEVICE_TOKEN."
+    #        rc=$RC_SUCCESS
+    #    else
+    #        echo "Failed to update the device info in anax for device $DEVICE_ID with token $DEVICE_TOKEN: " $( get_message "$ret" )
+    #        rc=$RC_FAILED_UPDATE_DEVICE_ANAX
+    #    fi
+
+    fi
+
+    return $rc
+}
+
+
+#####
+# This function registers the attributes that are common to all of the micorservices.
+# The attributes are location attributes and compute attributes.
+reg_microservice_commom_attributes()
+{
+    # do not need this if it is second or more time running the script
+    if [[ $REREG -eq 1 ]]; then
+        return $RC_SUCCESS
+    fi
+
+    echo "Register common service attributes."
+
+    # get lat and lon of the device if not defined
+    if [[ -z $LAT ]] || [[ -z $LON ]]; then
+        ret=$(curl $curlBasicArgs "http://ip-api.com/json")
+        if ! check_status_code "$ret" 200; then
+            echo "Failed to get device location. " $(get_message "$ret")
+            return $RC_FAILED_GET_LOCATION
+        fi
+        LAT=$(get_message "$ret" | jq '.lat')
+        LON=$(get_message "$ret" | jq '.lon')
+    fi
+
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "LAT=$LAT, LON=$LON"
+    fi
+
+    # register location attibutes for all services
+    read -d '' locationattribute <<EOF
+    {
+        "id": "location",
+        "short_type": "location",
+        "label": "Registered Location Facts",
+        "publishable": false,
+        "mappings": {
+            "lat": "$LAT",
+            "lon": "$LON",
+            "user_provided_coords": true,
+            "use_gps": $USE_GPS
+        }
+    }
+EOF
+
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "echo '$locationattribute' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service/attribute\""
+    fi
+    ret=$(echo "$locationattribute" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service/attribute")
+    if check_status_code "$ret" 200; then
+        echo "location attributes added to anax for all the services."
+        return $RC_SUCCESS
+    else
+        echo "Failed to add location attributes to anax for all the services. " $(get_message "$ret")
+        return $RC_FAILED_REG_SERVICE_ATTRIBS_ANAX
+    fi 
+}
+
+
+####
+# This function registers the location service.
+reg_location_microservice()
+{
+    # do not need this if it is second or more time running the script
+    if [[ $REREG -eq 1 ]]; then
+        return $RC_SUCCESS
+    fi
+
+    # get the directory where this script is in
+    reg_dir="$(dirname "$(readlink -f "$0")")"
+
+    if [[ $USE_GPS == "true" ]]; then
+        file_name="$reg_dir/location_gps.json"
+    else
+        file_name="$reg_dir/location_no_gps.json"
+    fi
+
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "cat $file_name | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
+    fi
+    ret=$(cat $file_name | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
+    if check_status_code "$ret" 201; then
+        echo "location service registered."
+    else
+        echo "Failed to register location services. " $(get_message "$ret")
+        return $RC_FAILED_REG_SERVICE_ANAX
+    fi
+  
+    return $RC_SUCCESS
+}
+
+
+#####
+# This furncion appends the given service to the given service queue. It will make sure no duplication.
+append_service()
+{
+    svcs=$2
+    if [[ -z "$2" ]]; then
+        echo "$1"
+    else
+        if [ "${svcs#*$1}" == "$svcs" ]; then
+            echo "$svcs,$1"
+        else
+            echo "$svcs"
+        fi
+    fi
+}
+
+
+#####
+# This furncion get all the registered services from anax and fill the SERVICES_TO_ADD and SERVICES_TO_DEL variables.
+get_all_microservices()
+{
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "Get all registered service attributes:"
+    fi
+
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "curl $curlBasicArgs \"$ANAX_API/service/attribute\""
+    fi
+    ret=$(curl $curlBasicArgs "$ANAX_API/service/attribute")
+
+    # exit out if the api call fails
+    if ! check_status_code "$ret" 200; then
+        echo "Failed to get all the services. " $(get_message "$ret")
+        return $RC_FAILED_GET_SERVICE_ANAX
+    fi
+
+    # get all the service names fromt responce.
+    all_svcs=""
+    resp=$(get_message "$ret" | jq -c '.attributes[]')
+    for attrib in $resp
+    do
+        service=$(echo $attrib | sed 's/^.*https:\/\/bluehorizon.network\/documentation\/\(.*\)-device-api.*$/\1/')
+        if [[ $service != $attrib ]]; then 
+            if [[ -n $service ]]; then
+                all_svcs=$(append_service $service $all_svcs)                    
+            fi
+        fi
+    done
+
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "all_svcs=$all_svcs"
+    fi
+
+
+    # decide what services to add
+    for svc in $(echo $SERVICES | sed "s/,/ /g")
+    do 
+        if [ "$svc" != "location" ] && [ "${all_svcs#*$svc}" == "$all_svcs" ]; then
+            SERVICES_TO_ADD=$(append_service $svc $SERVICES_TO_ADD)                    
+        fi
+    done
+
+    # decide what services to delete
+    for svc in $(echo $all_svcs | sed "s/,/ /g")
+    do 
+        if [ "$svc" != "location" ] && [ "${SERVICES#*$svc}" == "$SERVICES" ]; then
+            SERVICES_TO_DEL=$(append_service $svc $SERVICES_TO_DEL)                    
+        fi
+    done
+
+    return $RC_SUCCESS
+}
+
+
+####
+# This function registers the services specified in the SERVICES env variable to anax
+# in order to form agreements with the agbots.
+reg_microservices()
+{
+    # add services
+    if [[ -z $SERVICES_TO_ADD ]]; then
+        # do nothing if no services to add
+        echo "No new services to be added."
+    else
+        # get the directory where this script is in
+        reg_dir="$(dirname "$(readlink -f "$0")")"
+
+        # register services one by one
+        for service in $(echo $SERVICES_TO_ADD | tr "," " "); do
+            if [[ $VERBOSE -eq 1 ]]; then
+                echo "\n[D] $service service payload:"
+                envsubst < "$reg_dir/$service.json"
+            fi
+
+            if [[ $VERBOSE -eq 1 ]]; then
+                echo "envsubst < \"$reg_dir/$service.json\"  | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
+            fi
+            ret=$(envsubst < "$reg_dir/$service.json"  | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
+            if check_status_code "$ret" 201; then
+                echo "$service service registered."
+            else
+                echo "Failed to register $service services. " $(get_message "$ret")
+                return $RC_FAILED_REG_SERVICE_ANAX
+            fi
+        done
+    fi
+ 
+    # delete services
+    if [[ -z $SERVICES_TO_DEL ]]; then
+        # do nothing if no services to delete
+        echo "No services to be deleted."
+    else
+        echo "Services to be deleted are: $SERVICES_TO_DEL. However anax does not support deleting services yet."
+    fi
+
+    return $RC_SUCCESS
+}
+
+
+########################################################
+# Main program starts here
+########################################################
+
+# save all the paremeters for later use
+ALL_PARAMES=$@
+
+# parse the parameters from the command line
+while getopts ":f:h" opt; do
+    case $opt in
+        h)
+            usage
+            exit 0
+            ;;
+        f)
+            env_vars_fn="$OPTARG"
+            ;;
+        *)
+            echo "Invalid option: -$OPTARG"
+            usage
+            exit $RC_BAD_PARAM
+            ;;
+    esac
+done
+
+# handle the case like "reg_all fn".
+if [[ $OPTIND -eq 1 ]]  && [[ $# -gt 0 ]]; then
+    echo "Invalid argument: $@"
+    usage
+    exit $RC_BAD_PARAM
+fi
+
+# set up environmental variables
+if [[ -z "$env_vars_fn" ]]; then
+    ENV_VARS_FILE_NAME="$(dirname "$(readlink -f "$0")")/env_vars"
+else
+    if [[ -f $env_vars_fn ]]; then 
+        ENV_VARS_FILE_NAME=$env_vars_fn
+    else
+        echo "The file $env_vars_fn does not exist."
+        exit $RC_BAD_PARAM
+    fi
+fi
+
+# make sure anax is running
+pidof anax > /dev/null
+if [[ $? -ne 0 ]]; then
+    echo "anax is not running. Please install the bluehorizon snap."
+    exit $RC_ANAX_NOT_RUNNING
+fi
+
+source $ENV_VARS_FILE_NAME
+
+# Global variables
+EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
+EXCH=${EXCH%/} # remove the last slash if it has one
+ANAX_API="http://localhost:$ANAX_API_PORT"
+REREG=0    # not first time to run this script
+SERVICES_TO_ADD=""  # services to be added
+SERVICES_TO_DEL=""  # services to be deleted
+
+# define the necessary environmental variables
+if [[ -z $DEVICE_ID ]]; then
+    DEVICE_ID=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_DEVICE_ID |sed 's/CMTN_DEVICE_ID=//')
+fi
+if [[ -z $DEVICE_NAME ]]; then
+    DEVICE_NAME=$DEVICE_ID
+fi
+
+
+reg_dir=$(dirname "$(readlink -f "$0")")
+if [[ -z $USER ]] || [[ -z $PASSWORD ]] || [[ -z $EMAIL ]]; then
+    echo "Please make sure USER, PASSWORD and EMAIL are defined in $ENV_VARS_FILE_NAME."
+    exit $RC_ENV_NOT_DEFINED
+fi 
+
+# check if this is re-registration
+if [[ $VERBOSE -eq 1 ]]; then
+    echo "curl $curlBasicArgs \"$ANAX_API/horizondevice\""
+fi
+ret=$(curl $curlBasicArgs "$ANAX_API/horizondevice")
+if ! check_status_code "$ret" 200; then
+    echo "Failed to get device information from anax api. " $(get_message "$ret")
+    exit $RC_FAILED_GET_DEVICE_INFO_ANAX
+fi
+
+ret_json=$(get_message "$ret")
+echo $ret_json | jq -er '. | .account.id' > /dev/null
+if [[ $? -eq 0 ]]; then
+    REREG=1
+fi
+
+# make sure device id stays the same.
+device=$(echo $ret_json | jq '.id')
+device=$(echo ${device//\"/}) # remove quotes
+if [[ $device != $DEVICE_ID ]]; then
+    echo "The new device id $DEVICE_ID does not match the existing device id $device."
+    echo "Anax does not support changing device id."
+    echo "Please restart the bluehorizon snap and rerun this command by doing the following: "
+    display_change_device_and_restart
+    exit $RC_NOT_SUPPORT_DEVICE_CHANGE
+fi
+
+if [[ $REREG -eq 1 ]]; then
+    # make sure user is the same for re-registration
+    user=$(echo $ret_json | jq '.account.id')
+    user=$(echo ${user//\"/}) # remove quotes
+    if [[ $user != $USER ]]; then
+        echo "The new user name $USER does not match the existing user name $user."
+        echo "Re-registration does not support the change of user."
+        exit $RC_REREG_NOT_SUPPORT_USER_CHANGE
+    fi
+fi
+
+if [[ $REREG -eq 0 ]]; then
+    # only create a new token when it is first time.
+    if [[ -z $DEVICE_TOKEN ]]; then
+        DEVICE_TOKEN=$(date +%s | sha256sum | base64 | head -c 32; echo)
+    fi
+    SERVICES_TO_ADD=$SERVICES
+    SERVICES_TO_DEL=""
+else
+    # go through all the service attributes and find the existing services
+    # and fill the SERVICES_TO_ADD and SERVICES_TO_DEL variables.
+    get_all_microservices
+fi
+
+# display env variables for verbose mode
+if [[ $VERBOSE -eq 1 ]]; then
+    disp_env_vars
+fi
+
+# register user on exchange
+reg_user
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+# register device on exchange
+reg_device_to_exchange
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+# register device and user to anax
+reg_device_to_anax
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+# register commont attributes for all services
+reg_microservice_commom_attributes
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+# register location service
+reg_location_microservice
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+# register services defined in the SERVICES env variable
+reg_microservices
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+

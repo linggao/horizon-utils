@@ -1,0 +1,25 @@
+{
+  "sensor_url": "https://bluehorizon.network/documentation/location-device-api",
+  "sensor_name": "location",
+  "attributes": [
+    {
+      "id": "app",
+      "short_type": "mapped",
+      "label": "app",
+      "publishable": true,
+      "mappings": {
+        "MTN_GPS": "true"
+      }
+    },
+    {
+      "id": "compute",
+      "short_type": "compute",
+      "label": "Compute Resources",
+      "publishable": true,
+      "mappings": {
+        "ram": 128,
+        "cpus": 1
+      }
+    }
+  ]
+}

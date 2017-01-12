@@ -1,0 +1,26 @@
+{
+  "sensor_url": "https://bluehorizon.network/documentation/airpollution-device-api",
+  "sensor_name": "airpollution",
+  "attributes": [
+    {
+      "id": "app",
+      "short_type": "mapped",
+      "label": "app",
+      "publishable": true,
+      "mappings": {
+        "MTN_AIR_POLLUTION": "true",
+        "MTN_PURPLE_AIR_SENSOR_NAME": "$AIRPOLLUTION_PURPLE_AIR_SENSOR_NAME"
+      }
+    },
+    {
+      "id": "compute",
+      "short_type": "compute",
+      "label": "Compute Resources",
+      "publishable": true,
+      "mappings": {
+        "ram": 128,
+        "cpus": 1
+      }
+    }
+  ]
+}

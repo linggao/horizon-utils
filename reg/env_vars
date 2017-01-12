@@ -1,0 +1,57 @@
+
+# required, must be filled before running reg_all.
+export USER=
+export PASSWORD=
+export EMAIL=
+
+# optional, these variables will be auto filled if you do not define them here.
+# if you want to fill them manually, you can go to http://www.latlong.net/ to find your gps location
+export LAT=
+export LON=
+
+# has a GPS attached to the device and want to use it for location. (true, false)
+export USE_GPS="false"
+
+# the http port for anax api, default is 80.
+export ANAX_API_PORT=80
+
+# verbose mode for reg_all command (0, 1)
+export VERBOSE=1
+
+#################################################################### 
+### env vars for services. the variables start with the service name
+####################################################################
+
+# a comma seperated service names to be registered. (netspeed,sdr,citygram,pws,airpollution)
+export SERVICES="netspeed"
+
+
+### netspeed
+# the server for testing netspeed. (closest, fastest, random)
+export NETSPEED_TARGET_SERVER="closest"
+
+
+### citygram
+# citygram account email address, password
+export CITYGRAM_CG_EMAIL=""
+export CITYGRAM_CG_PASS=""
+
+# citygram remote sensor device (RDS) name and description
+export CITYGRAM_CG_RSDNAME="my-RSD01"
+export CITYGRAM_CG_RSDDESC="Home,near window"
+
+
+### pws
+# pws weather station description
+export PWS_WUGNAME="my pws at new york"
+
+# pws weather station model and type. 
+export PWS_MODEL=""
+export PWS_ST_TYPE=""
+
+
+### airpollution
+# purple air sensor name. be sure to add ".local" at the end of the sensor name
+export AIRPOLLUTION_PURPLE_AIR_SENSOR_NAME=""
+
+

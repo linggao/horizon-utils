@@ -1,0 +1,230 @@
+#!/bin/bash
+
+#  This script removes the currently running bluehorizon snap, cleans the env associated 
+#  with it. It then loads the latest verson of the bluehorizon snap. If you want to supply
+#  a local snap, please input a fully qualified snap path (with name) to the command. 
+#  If no snap name and path is supplied, the script will go to the Ubuntu store to download the latest snap.
+#  Usage:
+#     update_horizon [snap_path]
+
+# setup environmental variables
+source "$(dirname "$(readlink -f "$0")")/env_vars"
+
+EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
+EXCH=${EXCH%/} # remove the last slash if it has one
+ANAX_API="http://localhost:$ANAX_API_PORT"
+
+content="-H Content-Type:application/json"
+curlBasicArgs="-s -w %{http_code} -H Accept:application/json"
+
+# return code
+RC_SUCCESS=0
+RC_FAILED_REMOVE_SNAP=180
+RC_FAILED_INSTALL_SNAP=181
+RC_NO_DEVICE_ID=182
+
+
+#####
+# This function parses the first parameter which is a json structure + a number.
+# It matches the number with the second parameter. The function reterns true if
+# the two numbers qual, otherwise false.
+check_status_code() 
+{
+  http_ret=$1
+  exp_code=$2
+
+  rc=$(echo $http_ret | sed 's/.*}\([0-9]*\)$/\1/')
+  if [[ $VERBOSE -eq 1 ]]; then
+    echo $rc,$exp_code 
+  fi
+  if [ $rc -eq $exp_code ]; then
+    return 0 # 0 = true
+  else
+    return 1 # 1 = false
+  fi
+}
+
+#####
+# This function returns parses the input string which is a json + number. 
+# It returns the json part.
+get_message()
+{
+  msg=`echo $1 | sed 's/\(.*}\)\([0-9]*\)$/\1/'`
+  echo $msg
+}
+
+#####
+# This function removes all the docker containers for the workloads.
+remove_workloads() {
+    echo "*Remove workload containers from docker."
+    # make sure anax is running
+    pidof anax > /dev/null
+    if [[ $? -ne 0 ]]; then
+        echo "anax is not running."
+        return 1
+    fi
+
+    # get the workload from anax
+    ret=$(curl -X GET $curlBasicArgs "$ANAX_API/workload")
+    if ! check_status_code "$ret" 200; then
+        echo "failed to get the workloads from the anax api." $(get_message "$ret")
+        return 1
+    fi
+
+    # remove the docker containers associated with the workload
+    names=$(get_message "$ret" | jq '.workloads[].Names[]')
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "workload names: $names"
+    fi
+
+    if [ -n "$names" ]; then
+        for workload in $names
+        do
+            workload=$(echo ${workload//\"/})
+            echo "removing docker container ${workload:1}"
+            docker rm -f ${workload:1};
+            if [[ $? -ne 0 ]]; then
+                echo "failed to remove docker container ${workload:1}"
+            fi
+        done
+    fi
+    return $RC_SUCCESS
+}
+
+#####
+# This function removes bluehorizon snap.
+remove_snap() {
+    echo "*Remove bluehorizon snap."
+    snap list | grep bluehorizon 
+    if [[ $? -ne 0 ]]; then
+        echo "bluehorizon is not installed."
+    else
+        snap remove bluehorizon
+    fi
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to remove bluehorizon snap"
+        return $RC_FAILED_REMOVE_SNAP
+    fi
+    return $RC_SUCCESS
+}
+
+#####
+# This function removes the device from the exchange
+remove_device() {
+    echo "*Delete the device $DEVICE_ID from the exchange"
+    reg_dir=$(dirname "$(readlink -f "$0")")
+    if [[ -z $USER ]] || [[ -z $PASSWORD ]]; then
+        echo "Please make sure USER and PASSWORD are defined in $reg_dir/env_vars file in order to delete the device from the exchange."
+        return 1
+    fi 
+
+    # check if the device exists on the exchange
+    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
+    if check_status_code "$ret" 200; then
+        echo "device $DEVICE_ID exists on the exchange, will delete it."
+        ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
+        if ! check_status_code "$ret" 204; then
+            echo "failed to delete the device $DEVICE_ID from the exchange. " $(get_message "$ret")
+            return 1
+        else
+            echo "device $DEVICE_ID deleted from the exchange"
+        fi
+    else
+        echo "device $DEVICE_ID does not exists on the exchange."
+    fi
+    return $RC_SUCCESS
+}
+
+#####
+# This function installs bluehorizon snap.
+install_snap() {
+    snap=$1
+
+    echo "*Copy the configuration files."
+    # set up the configuration files for anax
+    mkdir -p /var/snap/bluehorizon/common/config
+
+    if [ -e /boot/firmware/horizon/config ]; then
+        cp -af /boot/firmware/horizon/config /var/snap/bluehorizon/common/
+    fi
+    # stuff from /var may overwrite the boot stuff
+    if [ -e /var/horizon/config ]; then
+        cp -af /var/horizon/config /var/snap/bluehorizon/common/
+    fi
+ 
+    # install the snap
+    echo "*Install bluehorizon snap. "
+    if [[ -n $snap ]]; then
+        echo "get bluehoizon snap from local file: $snap."
+        snap install --devmode $snap
+    else
+        echo "get bluehorizon snap from the Ubuntu store."
+        d_ver_fn="/var/snap/bluehorizon/common/config/horizon_directory_version"
+        if [ -f $d_ver_fn ] && grep -q "999" $d_ver_fn; then
+            channel="edge"
+        else
+            channel="beta"
+        fi
+        snap install --devmode --$channel bluehorizon
+    fi
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to install the bluehorizon snap"
+        return $RC_FAILED_INSTALL_SNAP
+    fi
+    return $RC_SUCCESS
+}
+
+
+### The main program starts here
+
+# get local snap path (with name) if it is supplied
+snap_path=""
+if [ $# -gt 0 ]; then
+    snap_path=$1
+fi
+
+# get device id
+if [[ -z $DEVICE_ID ]]; then
+    pidof anax > /dev/null
+    if [[ $? -ne 0 ]]; then
+        # get device id from the device id file when anax is not running.
+        if [ -f "/var/snap/bluehorizon/common/config/device_id" ]; then
+              DEVICE_ID=$(cat "/var/snap/bluehorizon/common/config/device_id")  
+        elif [ -f "/var/horizon/config/device_id" ]; then
+            DEVICE_ID=$(cat "/var/horizon/config/device_id")
+        else
+            # TODO: create device_id file.
+            echo "please specify /var/horizon/config/device_id file. "
+            exit $RC_NO_DEVICE_ID
+        fi
+    else
+        # get the DEVICE_ID from anax if it is running.
+        DEVICE_ID=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_DEVICE_ID |sed 's/CMTN_DEVICE_ID=//')
+    fi
+fi
+echo "DEVICE_ID=$DEVICE_ID"
+
+# remove the workloads
+remove_workloads
+
+# remove the old snap
+remove_snap
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+# remove the device from the exchange
+remove_device
+
+# install the new snap
+install_snap $snap_path
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+
+
+
+

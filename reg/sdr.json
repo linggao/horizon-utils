@@ -1,0 +1,26 @@
+{
+  "sensor_url": "https://bluehorizon.network/documentation/sdr-device-api",
+  "sensor_name": "sdr",
+  "attributes": [
+    {
+      "id": "app",
+      "short_type": "mapped",
+      "label": "app",
+      "publishable": true,
+      "mappings": {
+        "MTN_SDR": true
+      }
+    },
+    {
+      "id": "compute",
+      "short_type": "compute",
+      "label": "Compute Resources",
+      "publishable": true,
+      "mappings": {
+        "ram": 128,
+        "cpus": 1
+      }
+    }
+
+  ]
+}

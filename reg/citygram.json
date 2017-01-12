@@ -1,0 +1,37 @@
+{
+  "sensor_url": "https://bluehorizon.network/documentation/citygram-device-api",
+  "sensor_name": "citygram",
+  "attributes": [
+    {
+      "id": "app",
+      "short_type": "mapped",
+      "label": "app",
+      "publishable": true,
+      "mappings": {
+        "citygram": "true"
+      }
+    },
+    {
+      "id": "private_data",
+      "short_type": "mapped",
+      "label": "private_data",
+      "publishable": false,
+      "mappings": {
+        "cg_email": "$CITYGRAM_CG_EMAIL",
+        "cg_pass": "$CITYGRAM_CG_PASS",
+        "cg_rsdname": "$CITYGRAM_CG_RSDNAME",
+        "cg_rsddesc": "$CITYGRAM_CG_RSDDESC"
+      }
+    },
+    {
+      "id": "compute",
+      "short_type": "compute",
+      "label": "Compute Resources",
+      "publishable": true,
+      "mappings": {
+        "ram": 256,
+        "cpus": 1
+      }
+    }
+  ]
+}
