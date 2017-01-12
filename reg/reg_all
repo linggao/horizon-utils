@@ -556,7 +556,7 @@ fi
 
 # set up environmental variables
 if [[ -z "$env_vars_fn" ]]; then
-    ENV_VARS_FILE_NAME="$(dirname "$(readlink -f "$0")")/env_vars"
+    ENV_VARS_FILE_NAME="/var/horizon/reg/env_vars"
 else
     if [[ -f $env_vars_fn ]]; then 
         ENV_VARS_FILE_NAME=$env_vars_fn
@@ -591,8 +591,6 @@ if [[ -z $DEVICE_NAME ]]; then
     DEVICE_NAME=$DEVICE_ID
 fi
 
-
-reg_dir=$(dirname "$(readlink -f "$0")")
 if [[ -z $USER ]] || [[ -z $PASSWORD ]] || [[ -z $EMAIL ]]; then
     echo "Please make sure USER, PASSWORD and EMAIL are defined in $ENV_VARS_FILE_NAME."
     exit $RC_ENV_NOT_DEFINED
