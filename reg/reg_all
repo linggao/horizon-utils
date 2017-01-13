@@ -360,7 +360,7 @@ EOF
         echo "echo '$locationattribute' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service/attribute\""
     fi
     ret=$(echo "$locationattribute" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service/attribute")
-    if check_status_code "$ret" 200; then
+    if check_status_code "$ret" 201 || check_status_code "$ret" 200; then
         echo "location attributes added to anax for all the services."
         return $RC_SUCCESS
     else
@@ -558,12 +558,12 @@ fi
 if [[ -z "$env_vars_fn" ]]; then
     ENV_VARS_FILE_NAME="/var/horizon/reg/env_vars"
 else
-    if [[ -f $env_vars_fn ]]; then 
-        ENV_VARS_FILE_NAME=$env_vars_fn
-    else
-        echo "The file $env_vars_fn does not exist."
-        exit $RC_BAD_PARAM
-    fi
+    ENV_VARS_FILE_NAME=$env_vars_fn
+fi
+
+if [[ ! -f $ENV_VARS_FILE_NAME ]]; then 
+    echo "The file $ENV_VARS_FILE_NAME does not exist."
+    exit $RC_BAD_PARAM
 fi
 
 # make sure anax is running
