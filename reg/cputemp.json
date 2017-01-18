@@ -8,7 +8,8 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "MTN_CPU_TEMP": "true"
+        "MTN_CPU_TEMP": "true",
+        "HZN_CPU_TEMP": "true"
       }
     },
     {

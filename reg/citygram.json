@@ -8,7 +8,8 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "citygram": "true"
+        "MTN_CITYGRAM": "true",
+        "HZN_CITYGRAM": "true"
       }
     },
     {
@@ -17,10 +18,14 @@
       "label": "private_data",
       "publishable": false,
       "mappings": {
-        "cg_email": "$CITYGRAM_CG_EMAIL",
-        "cg_pass": "$CITYGRAM_CG_PASS",
-        "cg_rsdname": "$CITYGRAM_CG_RSDNAME",
-        "cg_rsddesc": "$CITYGRAM_CG_RSDDESC"
+        "MTN_CG_EMAIL": "$CITYGRAM_CG_EMAIL",
+        "HZN_CG_EMAIL": "$CITYGRAM_CG_EMAIL",
+        "MTN_CG_PASS": "$CITYGRAM_CG_PASS",
+        "HZN_CG_PASS": "$CITYGRAM_CG_PASS",
+        "MTN_CG_RSDNAME": "$CITYGRAM_CG_RSDNAME",
+        "HZN_CG_RSDNAME": "$CITYGRAM_CG_RSDNAME",
+        "MTN_CG_RSDDESC": "$CITYGRAM_CG_RSDDESC",
+        "HZN_CG_RSDDESC": "$CITYGRAM_CG_RSDDESC"
       }
     },
     {

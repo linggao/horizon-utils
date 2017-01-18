@@ -8,8 +8,10 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "MTN_AIR_POLLUTION": "true",
-        "MTN_PURPLE_AIR_SENSOR_NAME": "$AIRPOLLUTION_PURPLE_AIR_SENSOR_NAME"
+        "MTN_AIRPOLLUTION": "true",
+        "HZN_AIRPOLLUTION": "true",
+        "MTN_PURPLE_AIR_SENSOR_NAME": "$AIRPOLLUTION_PURPLE_AIR_SENSOR_NAME",
+        "HZN_PURPLE_AIR_SENSOR_NAME": "$AIRPOLLUTION_PURPLE_AIR_SENSOR_NAME"
       }
     },
     {

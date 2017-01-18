@@ -9,9 +9,13 @@
       "publishable": true,
       "mappings": {
         "MTN_PWS": "true",
+        "HZN_PWS": "true",
         "MTN_WUGNAME": "$PWS_WUGNAME",
+        "HZN_WUGNAME": "$PWS_WUGNAME",
         "MTN_PWS_MODEL": "$PWS_MODEL",
-        "MTN_PWS_ST_TYPE": "$PWS_ST_TYPE"
+        "HZN_PWS_MODEL": "$PWS_MODEL",
+        "MTN_PWS_ST_TYPE": "$PWS_ST_TYPE",
+        "HZN_PWS_ST_TYPE": "$PWS_ST_TYPE"
       }
     },
     {
