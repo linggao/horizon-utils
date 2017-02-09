@@ -197,11 +197,11 @@ reg_device_to_exchange()
                 echo "curl -X DELETE $curlBasicArgs -H \"Authorization:Basic ${USER}:${PASSWORD}\" \"$EXCH/devices/${DEVICE_ID}\""
             fi
             ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
-            if ! check_status_code "$ret" 204; then
+            if check_status_code "$ret" 204 || check_status_code "$ret" 404; then
+                echo "Device $DEVICE_ID deleted."
+            else
                 echo "Failed to delete the device $DEVICE_ID from the exchange. " $(get_message "$ret")
                 return $RC_FAILED_DELETE_DEVICE_EXCH
-            else
-                echo "Device $DEVICE_ID deleted."
             fi
             device_exists=0
         fi
