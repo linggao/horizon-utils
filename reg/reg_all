@@ -139,6 +139,10 @@ reg_user() {
 
     # create the user
     echo "The user $USER does not exist, will create it."
+    if [[ -z $EMAIL ]]; then
+        echo "Please make sure EMAIL is defined in $ENV_VARS_FILE_NAME."
+        exit $RC_ENV_NOT_DEFINED
+    fi
     read -d '' user <<EOF
     {  
         "password": "$PASSWORD",
@@ -591,8 +595,8 @@ if [[ -z $DEVICE_NAME ]]; then
     DEVICE_NAME=$DEVICE_ID
 fi
 
-if [[ -z $USER ]] || [[ -z $PASSWORD ]] || [[ -z $EMAIL ]]; then
-    echo "Please make sure USER, PASSWORD and EMAIL are defined in $ENV_VARS_FILE_NAME."
+if [[ -z $USER ]] || [[ -z $PASSWORD ]]; then
+    echo "Please make sure USER and PASSWORD are defined in $ENV_VARS_FILE_NAME."
     exit $RC_ENV_NOT_DEFINED
 fi 
 
