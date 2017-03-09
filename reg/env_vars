@@ -7,7 +7,7 @@
 export USER=
 export PASSWORD=
 
-# this variableis not needed if the USER exists already
+# this variable is not needed if the USER exists already
 export EMAIL=
 
 
