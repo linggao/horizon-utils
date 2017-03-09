@@ -1,8 +1,19 @@
 
+###################################################################
+# user
+###################################################################
+
 # required, must be filled before running reg_all.
 export USER=
 export PASSWORD=
+
+# this variableis not needed if the USER exists already
 export EMAIL=
+
+
+####################################################################
+# device
+####################################################################
 
 # optional, these variables will be auto filled if you do not define them here.
 # if you want to fill them manually, you can go to http://www.latlong.net/ to find your gps location
@@ -12,26 +23,20 @@ export LON=
 # has a GPS attached to the device and want to use it for location. (true, false)
 export USE_GPS="false"
 
-# the http port for anax api, default is 80.
-export ANAX_API_PORT=80
-
-# verbose mode for reg_all command (0, 1)
-export VERBOSE=1
 
 #################################################################### 
-### env vars for services. the variables start with the service name
+### service
 ####################################################################
 
 # a comma seperated service names to be registered. (netspeed,sdr,citygram,pws,airpollution)
 export SERVICES="netspeed"
 
-
-### netspeed
+### netspeed service related settings
 # the server for testing netspeed. (closest, fastest, random)
 export NETSPEED_TARGET_SERVER="closest"
 
 
-### citygram
+### citygram service related settings
 # citygram account email address, password
 export CITYGRAM_CG_EMAIL=""
 export CITYGRAM_CG_PASS=""
@@ -41,7 +46,7 @@ export CITYGRAM_CG_RSDNAME="my-RSD01"
 export CITYGRAM_CG_RSDDESC="Home,near window"
 
 
-### pws
+### pws service related settings
 # pws weather station description
 export PWS_WUGNAME="my pws at new york"
 
@@ -50,8 +55,17 @@ export PWS_MODEL=""
 export PWS_ST_TYPE=""
 
 
-### airpollution
+### airpollution service related settings
 # purple air sensor name. be sure to add ".local" at the end of the sensor name
 export AIRPOLLUTION_PURPLE_AIR_SENSOR_NAME=""
 
 
+#################################################################### 
+# program
+####################################################################
+
+# the http port for anax api, default is 80.
+export ANAX_API_PORT=80
+
+# verbose mode for reg_all command (0, 1)
+export VERBOSE=1
