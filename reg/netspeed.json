@@ -17,7 +17,7 @@
     {
       "id": "compute",
       "short_type": "compute",
-      "label": "Compute Resources",
+      "label": "Netspeed (network quality testing)",
       "publishable": true,
       "mappings": {
         "ram": 128,

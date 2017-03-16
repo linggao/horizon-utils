@@ -21,7 +21,7 @@
     {
       "id": "compute",
       "short_type": "compute",
-      "label": "Compute Resources",
+      "label": "Personal Weather Station",
       "publishable": true,
       "mappings": {
         "ram": 128,

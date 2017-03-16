@@ -31,7 +31,7 @@
     {
       "id": "compute",
       "short_type": "compute",
-      "label": "Compute Resources",
+      "label": "NYU Citygram (noise pollution analysis)",
       "publishable": true,
       "mappings": {
         "ram": 256,

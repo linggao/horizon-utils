@@ -17,7 +17,7 @@
     {
       "id": "compute",
       "short_type": "compute",
-      "label": "Compute Resources",
+      "label": "PurpleAir (air pollution sensing)",
       "publishable": true,
       "mappings": {
         "ram": 128,

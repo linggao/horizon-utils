@@ -15,7 +15,7 @@
     {
       "id": "compute",
       "short_type": "compute",
-      "label": "Compute Resources",
+      "label": "Device location",
       "publishable": true,
       "mappings": {
         "ram": 128,

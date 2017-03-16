@@ -15,7 +15,7 @@
     {
       "id": "compute",
       "short_type": "compute",
-      "label": "Compute Resources",
+      "label": "Software Defined Radio",
       "publishable": true,
       "mappings": {
         "ram": 128,
