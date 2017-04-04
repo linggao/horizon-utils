@@ -69,6 +69,8 @@ disp_env_vars()
     echo "REREG=$REREG"
     echo "SERVICES_TO_ADD=$SERVICES_TO_ADD"
     echo "SERVICES_TO_DEL=$SERVICES_TO_DEL"
+    echo "HA_DEVICE=$HA_DEVICE"
+    echo "HA_PARTNERS=$HA_PARTNERS"
 }
 
 
@@ -269,7 +271,8 @@ reg_device_to_anax()
             },
             "id": "$DEVICE_ID",
             "name": "$DEVICE_NAME",
-            "token": "$DEVICE_TOKEN"
+            "token": "$DEVICE_TOKEN",
+            "ha_device": $HA_DEVICE
         }
 EOF
         if [[ $VERBOSE -eq 1 ]]; then
@@ -291,7 +294,8 @@ EOF
             "id": "$USER"
             },
             "name": "$DEVICE_NAME",
-            "token": "$DEVICE_TOKEN"
+            "token": "$DEVICE_TOKEN",
+            "ha_device": $HA_DEVICE
         }
 EOF
     #    echo "anax does not support token update yet."
@@ -319,7 +323,7 @@ EOF
 
 #####
 # This function registers the attributes that are common to all of the micorservices.
-# The attributes are location attributes and compute attributes.
+# The attributes are location attributes and ha attributes.
 reg_microservice_commom_attributes()
 {
     # do not need this if it is second or more time running the script
@@ -392,10 +396,30 @@ reg_location_microservice()
         file_name="$reg_dir/location_no_gps.json"
     fi
 
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "cat $file_name | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
+    # add HA attribute to the service if HA_DEVICE is true
+    if [[ $HA_DEVICE == "true" ]]; then
+        hapartners=$(echo $HA_PARTNERS | sed -e 's/,/","/g' -e 's/^/["/' -e 's/$/"]/')
+        echo "hapartners=$hapartners"
+        read -d '' haattribute <<EOF
+        {
+            "id": "ha",
+            "short_type": "ha",
+            "label": "HA Facts",
+            "publishable": false,
+            "mappings": {
+                "partnerID": $hapartners
+            }
+        }
+EOF
+        service_reg=$(sed "/\"attributes\": \[/a \ \ \ \ $(echo $haattribute | sed -e 's/\"/\\\"/g')," $file_name)
+    else
+        service_reg=$(cat $file_name)
     fi
-    ret=$(cat $file_name | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
+ 
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
+    fi
+    ret=$(echo "$service_reg" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
     if check_status_code "$ret" 201; then
         echo "location service registered."
     else
@@ -496,15 +520,30 @@ reg_microservices()
 
         # register services one by one
         for service in $(echo $SERVICES_TO_ADD | tr "," " "); do
-            if [[ $VERBOSE -eq 1 ]]; then
-                echo "\n[D] $service service payload:"
-                envsubst < "$reg_dir/$service.json"
+            # add HA attribute to the service if HA_DEVICE is true
+            if [[ $HA_DEVICE == "true" ]]; then
+                hapartners=$(echo $HA_PARTNERS | sed -e 's/,/","/g' -e 's/^/["/' -e 's/$/"]/')
+                read -d '' haattribute <<EOF
+                {
+                    "id": "ha",
+                    "short_type": "ha",
+                    "label": "HA Facts",
+                    "publishable": false,
+                    "mappings": {
+                        "partnerID": $hapartners
+                    }
+                }
+EOF
+                service_reg=$(envsubst < "$reg_dir/$service.json" | sed "/\"attributes\": \[/a  \ \ \ \ $(echo $haattribute | sed -e 's/\"/\\\"/g'),")
+            else
+                service_reg=$(envsubst < "$reg_dir/$service.json")
             fi
 
             if [[ $VERBOSE -eq 1 ]]; then
-                echo "envsubst < \"$reg_dir/$service.json\"  | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
+                echo "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
             fi
-            ret=$(envsubst < "$reg_dir/$service.json"  | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
+            ret=$(echo "$service_reg" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
+
             if check_status_code "$ret" 201; then
                 echo "$service service registered."
             else
@@ -599,6 +638,17 @@ if [[ -z $USER ]] || [[ -z $PASSWORD ]]; then
     echo "Please make sure USER and PASSWORD are defined in $ENV_VARS_FILE_NAME."
     exit $RC_ENV_NOT_DEFINED
 fi 
+
+if [[ -z $HA_DEVICE ]]; then
+    HA_DEVICE="false"
+elif [ $HA_DEVICE == "true" ]; then
+    if [[ -z $HA_PARTNERS ]]; then
+        echo "Please make sure HA_PARTNERS is defined in $ENV_VARS_FILE_NAME because HA_DEVICE is \"true\"."
+        echo "You can use \"http://<ha_partner_ip>/horizondevice\" on the browser or "
+        echo "run \"curl -s http://<ha_partner_ip>/horizendevice | jq '.id'\" to get the ha partner's id."
+        exit $RC_ENV_NOT_DEFINED
+    fi
+fi
 
 # check if this is re-registration
 if [[ $VERBOSE -eq 1 ]]; then

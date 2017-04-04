@@ -23,13 +23,22 @@ export LON=
 # has a GPS attached to the device and want to use it for location. (true, false)
 export USE_GPS="false"
 
+# the device has a HA partner (true, false). If true, HA_PARTNERS must be specified.
+export HA_DEVICE="false"
+
+# The comma separated list of device id's of the ip partners.
+# Use link http://<ha_partner_ip>/horizondevice on the browser 
+# or run curl -s http://<ha_partner_ip>/horizendevice |jq '.id' to get a ha partner's device id.
+export HA_PARTNERS=
+
 
 #################################################################### 
 ### service
 ####################################################################
 
 # a comma seperated service names to be registered. (netspeed,sdr,citygram,pws,airpollution)
-export SERVICES="netspeed"
+export SERVICES="netspeed,sdr"
+
 
 ### netspeed service related settings
 # the server for testing netspeed. (closest, fastest, random)
