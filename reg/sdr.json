@@ -8,7 +8,6 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "MTN_SDR": true,
         "HZN_SDR": true
       }
     },

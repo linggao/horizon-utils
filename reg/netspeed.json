@@ -8,9 +8,7 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "MTN_IS_BANDWIDTH_TEST_ENABLED": "true",
         "HZN_IS_BANDWIDTH_TEST_ENABLED": "true",
-        "MTN_TARGET_SERVER": "$NETSPEED_TARGET_SERVER",
         "HZN_TARGET_SERVER": "$NETSPEED_TARGET_SERVER"
       }
     },

@@ -8,9 +8,7 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "MTN_GPS": "true",
         "HZN_GPS": "true",
-        "MTN_GPSDEVICE": true,
         "HZN_GPSDEVICE": true
       }
     },
