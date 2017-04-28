@@ -358,13 +358,10 @@ reg_location_microservice()
         return $RC_SUCCESS
     fi
 
-    # get the directory where this script is in
-    reg_dir="$(dirname "$(readlink -f "$0")")"
-
     if [[ $USE_GPS == "true" ]]; then
-        file_name="$reg_dir/location_gps.json"
+        file_name="$SCRIPT_DIR/location_gps.json"
     else
-        file_name="$reg_dir/location_no_gps.json"
+        file_name="$SCRIPT_DIR/location_no_gps.json"
     fi
 
     # add HA attribute to the service if HA_DEVICE is true
@@ -486,9 +483,6 @@ reg_microservices()
         # do nothing if no services to add
         echo "No new services to be added."
     else
-        # get the directory where this script is in
-        reg_dir="$(dirname "$(readlink -f "$0")")"
-
         # register services one by one
         for service in $(echo $SERVICES_TO_ADD | tr "," " "); do
             # add HA attribute to the service if HA_DEVICE is true
@@ -505,9 +499,9 @@ reg_microservices()
                     }
                 }
 EOF
-                service_reg=$(envsubst < "$reg_dir/$service.json" | sed "/\"attributes\": \[/a  \ \ \ \ $(echo $haattribute | sed -e 's/\"/\\\"/g'),")
+                service_reg=$(envsubst < "$SCRIPT_DIR/$service.json" | sed "/\"attributes\": \[/a  \ \ \ \ $(echo $haattribute | sed -e 's/\"/\\\"/g'),")
             else
-                service_reg=$(envsubst < "$reg_dir/$service.json")
+                service_reg=$(envsubst < "$SCRIPT_DIR/$service.json")
             fi
 
             if [[ $VERBOSE -eq 1 ]]; then
@@ -563,10 +557,10 @@ reg_microservice_common_attributes()
     # only do it when the file exists
     fn="$SCRIPT_DIR/common.json"
     if [ -f $fn ]; then
-        len=$(cat $fn | jq 'length')
+        len=$(envsubst < $fn | jq 'length')
         for (( i=0; i < $len; ++i ))
         do
-            attribute=$(cat $fn | jq "values[$i]")
+            attribute=$(envsubst < $fn | jq "values[$i]")
             if [[ -n $attribute ]]; then
                 reg_commom_attribute "$attribute"
                 rc=$?
