@@ -571,7 +571,8 @@ reg_microservice_common_attributes()
         done
     else
         if [[ $VERBOSE -eq 1 ]]; then
-            echo "The $fn does not exist."
+            echo "The file $fn does not exist."
+            return $RC_FAILED_REG_SERVICE_ATTRIBS_ANAX
         fi
     fi
 
