@@ -1,5 +1,6 @@
 env_vars
 reg_all
+common.json
 location_no_gps.json
 location_gps.json
 netspeed.json
