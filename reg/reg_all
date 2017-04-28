@@ -324,9 +324,8 @@ EOF
 
 
 #####
-# This function registers the attributes that are common to all of the micorservices.
-# The attributes are location attributes and ha attributes.
-reg_microservice_commom_attributes()
+# This function registers a given attribute that is common to all of the micorservices to anax
+reg_commom_attribute()
 {
     attribute=$1
     # do not need this if it is second or more time running the script
@@ -537,8 +536,8 @@ EOF
 }
 
 ####
-# This function registers the location attributes for all microservices
-reg_location_common_attribute()
+# This function sets the LAT and LON env variables when they are not defined
+set_latlon()
 {
     # get lat and lon of the device if not defined
     if [[ -z $LAT ]] || [[ -z $LON ]]; then
@@ -554,30 +553,12 @@ reg_location_common_attribute()
     if [[ $VERBOSE -eq 1 ]]; then
         echo "LAT=$LAT, LON=$LON"
     fi
-
-    # register location attibutes for all services
-    read -d '' locationattribute <<EOF
-    {
-        "id": "location",
-        "short_type": "location",
-        "label": "Registered Location Facts",
-        "publishable": false,
-        "mappings": {
-            "lat": "$LAT",
-            "lon": "$LON",
-            "user_provided_coords": true,
-            "use_gps": $USE_GPS
-        }
-    }
-EOF
-
-    reg_microservice_commom_attributes "$locationattribute"
 }
 
 ####
 # This function gets the common attributes from the common.json file
 # and register them one by one.
-reg_other_common_attributes()
+reg_microservice_common_attributes()
 {
     # only do it when the file exists
     fn="$SCRIPT_DIR/common.json"
@@ -587,7 +568,7 @@ reg_other_common_attributes()
         do
             attribute=$(cat $fn | jq "values[$i]")
             if [[ -n $attribute ]]; then
-                reg_microservice_commom_attributes "$attribute"
+                reg_commom_attribute "$attribute"
                 rc=$?
                 if [ $rc != $RC_SUCCESS ]; then
                     return $rc
@@ -767,14 +748,14 @@ if [ $rc != $RC_SUCCESS ]; then
 fi
 
 # register location attributes for all services
-reg_location_common_attribute
+set_latlon
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc
 fi
 
 # register other common attributes from common.json
-reg_other_common_attributes
+reg_microservice_common_attributes
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc

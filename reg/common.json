@@ -1,34 +1,46 @@
 [
-  {
-    "id": "metering",
-    "short_type": "metering",
-    "label": "Metering Policy",
-    "publishable": true,
-    "mappings": {
-      "tokens": 0,
-      "perTimeUnit": "",
-      "notificationInterval": 0
+    {
+        "id": "location",
+        "short_type": "location",
+        "label": "Registered Location Facts",
+        "publishable": false,
+        "mappings": {
+            "lat": "$LAT",
+            "lon": "$LON",
+            "user_provided_coords": true,
+            "use_gps": $USE_GPS
+        }
+    },
+    {
+        "id": "metering",
+        "short_type": "metering",
+        "label": "Metering Policy",
+        "publishable": true,
+        "mappings": {
+            "tokens": 0,
+            "perTimeUnit": "",
+            "notificationInterval": 0
+        }
+    },
+    {
+        "id": "property",
+        "short_type": "property",
+        "label": "Property",
+        "publishable": true,
+        "mappings": {
+        }
+    },
+    {
+        "id": "counterpartyproperty",
+        "short_type": "counterpartyproperty",
+        "label": "CounterParty Property",
+        "publishable": true,
+        "mappings": {
+            "expression": {
+                "and": [
+                ]
+            }
+        }
     }
-  },
-  {
-    "id": "property",
-    "short_type": "property",
-    "label": "Property",
-    "publishable": true,
-    "mappings": {
-    }
-  },
-  {
-    "id": "counterpartyproperty",
-    "short_type": "counterpartyproperty",
-    "label": "CounterParty Property",
-    "publishable": true,
-    "mappings": {
-      "expression": {
-        "and": [
-        ]
-      }
-    }
-  }
 ]
 
