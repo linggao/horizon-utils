@@ -11,6 +11,8 @@
 #     reg_all   (use the default environmental variable file /var/horizon/reg/env_vars)
 #
 
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
 # return code
 RC_SUCCESS=0
 RC_ENV_NOT_DEFINED=101
@@ -326,6 +328,7 @@ EOF
 # The attributes are location attributes and ha attributes.
 reg_microservice_commom_attributes()
 {
+    attribute=$1
     # do not need this if it is second or more time running the script
     if [[ $REREG -eq 1 ]]; then
         return $RC_SUCCESS
@@ -333,46 +336,15 @@ reg_microservice_commom_attributes()
 
     echo "Register common service attributes."
 
-    # get lat and lon of the device if not defined
-    if [[ -z $LAT ]] || [[ -z $LON ]]; then
-        ret=$(curl $curlBasicArgs "http://ip-api.com/json")
-        if ! check_status_code "$ret" 200; then
-            echo "Failed to get device location. " $(get_message "$ret")
-            return $RC_FAILED_GET_LOCATION
-        fi
-        LAT=$(get_message "$ret" | jq '.lat')
-        LON=$(get_message "$ret" | jq '.lon')
-    fi
-
     if [[ $VERBOSE -eq 1 ]]; then
-        echo "LAT=$LAT, LON=$LON"
+        echo "echo '$attribute' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service/attribute\""
     fi
-
-    # register location attibutes for all services
-    read -d '' locationattribute <<EOF
-    {
-        "id": "location",
-        "short_type": "location",
-        "label": "Registered Location Facts",
-        "publishable": false,
-        "mappings": {
-            "lat": "$LAT",
-            "lon": "$LON",
-            "user_provided_coords": true,
-            "use_gps": $USE_GPS
-        }
-    }
-EOF
-
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "echo '$locationattribute' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service/attribute\""
-    fi
-    ret=$(echo "$locationattribute" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service/attribute")
+    ret=$(echo "$attribute" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service/attribute")
     if check_status_code "$ret" 201 || check_status_code "$ret" 200; then
-        echo "location attributes added to anax for all the services."
+        echo "common attributes added to anax for all the services."
         return $RC_SUCCESS
     else
-        echo "Failed to add location attributes to anax for all the services. " $(get_message "$ret")
+        echo "Failed to add common attributes to anax for all the services. " $(get_message "$ret")
         return $RC_FAILED_REG_SERVICE_ATTRIBS_ANAX
     fi 
 }
@@ -564,6 +536,73 @@ EOF
     return $RC_SUCCESS
 }
 
+####
+# This function registers the location attributes for all microservices
+reg_location_common_attribute()
+{
+    # get lat and lon of the device if not defined
+    if [[ -z $LAT ]] || [[ -z $LON ]]; then
+        ret=$(curl $curlBasicArgs "http://ip-api.com/json")
+        if ! check_status_code "$ret" 200; then
+            echo "Failed to get device location. " $(get_message "$ret")
+            return $RC_FAILED_GET_LOCATION
+        fi
+        LAT=$(get_message "$ret" | jq '.lat')
+        LON=$(get_message "$ret" | jq '.lon')
+    fi
+
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "LAT=$LAT, LON=$LON"
+    fi
+
+    # register location attibutes for all services
+    read -d '' locationattribute <<EOF
+    {
+        "id": "location",
+        "short_type": "location",
+        "label": "Registered Location Facts",
+        "publishable": false,
+        "mappings": {
+            "lat": "$LAT",
+            "lon": "$LON",
+            "user_provided_coords": true,
+            "use_gps": $USE_GPS
+        }
+    }
+EOF
+
+    reg_microservice_commom_attributes "$locationattribute"
+}
+
+####
+# This function gets the common attributes from the common.json file
+# and register them one by one.
+reg_other_common_attributes()
+{
+    # only do it when the file exists
+    fn="$SCRIPT_DIR/common.json"
+    if [ -f $fn ]; then
+        len=$(cat $fn | jq 'length')
+        for (( i=0; i < $len; ++i ))
+        do
+            attribute=$(cat $fn | jq "values[$i]")
+            if [[ -n $attribute ]]; then
+                reg_microservice_commom_attributes "$attribute"
+                rc=$?
+                if [ $rc != $RC_SUCCESS ]; then
+                    return $rc
+                fi
+            fi
+        done
+    else
+        if [[ $VERBOSE -eq 1 ]]; then
+            echo "The $fn does not exist."
+        fi
+    fi
+
+    return $RC_SUCCESS
+}
+
 
 ########################################################
 # Main program starts here
@@ -727,8 +766,15 @@ if [ $rc != $RC_SUCCESS ]; then
     exit $rc
 fi
 
-# register commont attributes for all services
-reg_microservice_commom_attributes
+# register location attributes for all services
+reg_location_common_attribute
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+# register other common attributes from common.json
+reg_other_common_attributes
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc
