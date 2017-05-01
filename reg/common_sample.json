@@ -5,9 +5,9 @@
         "label": "Metering Policy",
         "publishable": true,
         "mappings": {
-            "tokens": 0,
-            "perTimeUnit": "",
-            "notificationInterval": 0
+            "tokens": 2,
+            "perTimeUnit": "hour",
+            "notificationInterval": 300
         }
     },
     {
@@ -16,6 +16,7 @@
         "label": "Property",
         "publishable": true,
         "mappings": {
+            "mykey1":true
         }
     },
     {
@@ -25,6 +26,9 @@
         "publishable": true,
         "mappings": {
             "expression": {
+                "and": [
+                    {"name":"mykey1", "op":"=", "value":true}
+                ]
             }
         }
     },
@@ -34,7 +38,7 @@
         "label": "HA Facts",
         "publishable": false,
         "mappings": {
-            "partnerID": []
+            "partnerID": ["device_id1", "device_id2"]
         }
     }
 ]

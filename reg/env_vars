@@ -23,13 +23,10 @@ export LON=
 # has a GPS attached to the device and want to use it for location. (true, false)
 export USE_GPS="false"
 
-# the device has a HA partner (true, false). If true, HA_PARTNERS must be specified.
+# the device has a HA partner (true, false). 
+# If true, please specify partnerID as ["device_id1", "device_id2"] in common.json file 
 export HA_DEVICE="false"
 
-# The comma separated list of device id's of the ip partners.
-# Use link http://<ha_partner_ip>/horizondevice on the browser 
-# or run curl -s http://<ha_partner_ip>/horizendevice |jq '.id' to get a ha partner's device id.
-export HA_PARTNERS=
 
 
 #################################################################### 

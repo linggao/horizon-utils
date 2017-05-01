@@ -328,22 +328,20 @@ EOF
 reg_commom_attribute()
 {
     attribute=$1
-    # do not need this if it is second or more time running the script
-    if [[ $REREG -eq 1 ]]; then
-        return $RC_SUCCESS
-    fi
 
-    echo "Register common service attributes."
+    atype=$(echo "$attribute" | jq '.short_type')
 
     if [[ $VERBOSE -eq 1 ]]; then
         echo "echo '$attribute' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service/attribute\""
     fi
     ret=$(echo "$attribute" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service/attribute")
     if check_status_code "$ret" 201 || check_status_code "$ret" 200; then
-        echo "common attributes added to anax for all the services."
+        if [[ $VERBOSE -eq 1 ]]; then
+            echo "$atype common attribute added to anax for all the services."
+        fi
         return $RC_SUCCESS
     else
-        echo "Failed to add common attributes to anax for all the services. " $(get_message "$ret")
+        echo "Failed to add $atype common attribute to anax. " $(get_message "$ret")
         return $RC_FAILED_REG_SERVICE_ATTRIBS_ANAX
     fi 
 }
@@ -364,25 +362,7 @@ reg_location_microservice()
         file_name="$SCRIPT_DIR/location_no_gps.json"
     fi
 
-    # add HA attribute to the service if HA_DEVICE is true
-    if [[ $HA_DEVICE == "true" ]]; then
-        hapartners=$(echo $HA_PARTNERS | sed -e 's/,/","/g' -e 's/^/["/' -e 's/$/"]/')
-        echo "hapartners=$hapartners"
-        read -d '' haattribute <<EOF
-        {
-            "id": "ha",
-            "short_type": "ha",
-            "label": "HA Facts",
-            "publishable": false,
-            "mappings": {
-                "partnerID": $hapartners
-            }
-        }
-EOF
-        service_reg=$(sed "/\"attributes\": \[/a \ \ \ \ $(echo $haattribute | sed -e 's/\"/\\\"/g')," $file_name)
-    else
-        service_reg=$(cat $file_name)
-    fi
+    service_reg=$(envsubst < $file_name)
  
     if [[ $VERBOSE -eq 1 ]]; then
         echo "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
@@ -440,6 +420,7 @@ get_all_microservices()
     resp=$(get_message "$ret" | jq -c '.attributes[]')
     for attrib in $resp
     do
+
         service=$(echo $attrib | sed 's/^.*https:\/\/bluehorizon.network\/documentation\/\(.*\)-device-api.*$/\1/')
         if [[ $service != $attrib ]]; then 
             if [[ -n $service ]]; then
@@ -485,25 +466,7 @@ reg_microservices()
     else
         # register services one by one
         for service in $(echo $SERVICES_TO_ADD | tr "," " "); do
-            # add HA attribute to the service if HA_DEVICE is true
-            if [[ $HA_DEVICE == "true" ]]; then
-                hapartners=$(echo $HA_PARTNERS | sed -e 's/,/","/g' -e 's/^/["/' -e 's/$/"]/')
-                read -d '' haattribute <<EOF
-                {
-                    "id": "ha",
-                    "short_type": "ha",
-                    "label": "HA Facts",
-                    "publishable": false,
-                    "mappings": {
-                        "partnerID": $hapartners
-                    }
-                }
-EOF
-                service_reg=$(envsubst < "$SCRIPT_DIR/$service.json" | sed "/\"attributes\": \[/a  \ \ \ \ $(echo $haattribute | sed -e 's/\"/\\\"/g'),")
-            else
-                service_reg=$(envsubst < "$SCRIPT_DIR/$service.json")
-            fi
-
+            service_reg=$(envsubst < "$SCRIPT_DIR/$service.json")
             if [[ $VERBOSE -eq 1 ]]; then
                 echo "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
             fi
@@ -533,6 +496,11 @@ EOF
 # This function sets the LAT and LON env variables when they are not defined
 set_latlon()
 {
+    # do not need this if it is second or more time running the script
+    if [[ $REREG -eq 1 ]]; then
+        return $RC_SUCCESS
+    fi
+
     # get lat and lon of the device if not defined
     if [[ -z $LAT ]] || [[ -z $LON ]]; then
         ret=$(curl $curlBasicArgs "http://ip-api.com/json")
@@ -547,6 +515,24 @@ set_latlon()
     if [[ $VERBOSE -eq 1 ]]; then
         echo "LAT=$LAT, LON=$LON"
     fi
+
+    # register location attibutes for all services
+    read -d '' locationattribute <<EOF
+    {
+        "id": "location",
+        "short_type": "location",
+        "label": "Registered Location Facts",
+        "publishable": false,
+        "mappings": {
+            "lat": "$LAT",
+            "lon": "$LON",
+            "user_provided_coords": true,
+            "use_gps": $USE_GPS
+        }
+    }
+EOF
+
+    reg_commom_attribute "$locationattribute"
 }
 
 ####
@@ -554,25 +540,74 @@ set_latlon()
 # and register them one by one.
 reg_microservice_common_attributes()
 {
+    # do not need this if it is second or more time running the script
+    if [[ $REREG -eq 1 ]]; then
+        return $RC_SUCCESS
+    fi
+
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "Register common service attributes."
+    fi
+
     # only do it when the file exists
     fn="$SCRIPT_DIR/common.json"
     if [ -f $fn ]; then
-        len=$(envsubst < $fn | jq 'length')
+        all_attributes=$(envsubst < $fn)
+        len=$(echo "$all_attributes" | jq 'length')
+
+        # check the common attribute one by one, skil the ones that have no data.
         for (( i=0; i < $len; ++i ))
         do
-            attribute=$(envsubst < $fn | jq "values[$i]")
+            attribute=$(echo "$all_attributes" | jq "values[$i]")
             if [[ -n $attribute ]]; then
-                reg_commom_attribute "$attribute"
-                rc=$?
-                if [ $rc != $RC_SUCCESS ]; then
-                    return $rc
+                # get short_type and remove quotes
+                atype=$(echo "$attribute" | jq '.short_type' | sed "s/\"//g;s/'//g")
+
+                reg=1
+                case $atype in
+                    "ha")
+                        v=$(echo "$attribute" | jq ".mappings.partnerID")
+                        if [ -z "$v" ] || [ "$v" == "[]" ] || [ "$v" == "null" ]; then
+                            reg=0
+                        fi
+                        ;;
+                    "metering")
+                        v=$(echo "$attribute" | jq ".mappings.tokens")
+                        if [ -z "$v" ] || [ "$v" == "0" ] || [ "$v" == "null" ]; then
+                            reg=0
+                        fi
+                        ;;
+                    "property")
+                        v=$(echo "$attribute" | jq ".mappings")
+                        if [ -z "$v" ] || [ "$v" == "{}" ] || [ "$v" == "null" ]; then
+                            reg=0
+                        fi
+                        ;;
+                    "counterpartyproperty")
+                        v=$(echo "$attribute" | jq ".mappings.expression")
+                        if [ -z "$v" ] || [ "$v" == "{}" ] || [ "$v" == "null" ]; then
+                            reg=0
+                        fi
+                        ;;
+                esac
+
+                # register the common attribute
+                if [[ $reg -eq 1 ]]; then
+                    reg_commom_attribute "$attribute"
+                    rc=$?
+                    if [ $rc != $RC_SUCCESS ]; then
+                        return $rc
+                    fi
+                else
+                    if [[ $VERBOSE -eq 1 ]]; then
+                        echo "Not register $atype common attribute because data is not defined."
+                    fi
                 fi
             fi
         done
     else
         if [[ $VERBOSE -eq 1 ]]; then
             echo "The file $fn does not exist."
-            return $RC_FAILED_REG_SERVICE_ATTRIBS_ANAX
         fi
     fi
 
@@ -657,11 +692,10 @@ fi
 if [[ -z $HA_DEVICE ]]; then
     HA_DEVICE="false"
 elif [ $HA_DEVICE == "true" ]; then
-    if [[ -z $HA_PARTNERS ]]; then
-        echo "Please make sure HA_PARTNERS is defined in $ENV_VARS_FILE_NAME because HA_DEVICE is \"true\"."
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "Info: Please make sure partnerID is defined in $SCRIPT_DIR/common.json file for the 'ha' attribute because HA_DEVICE is \"true\"."
         echo "You can use \"http://<ha_partner_ip>/horizondevice\" on the browser or "
-        echo "run \"curl -s http://<ha_partner_ip>/horizendevice | jq '.id'\" to get the ha partner's id."
-        exit $RC_ENV_NOT_DEFINED
+        echo "run \"curl -s http://<ha_partner_ip>/horizendevice | jq '.id'\" to get a ha partner's id."
     fi
 fi
 
