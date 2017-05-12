@@ -8,7 +8,6 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "MTN_CITYGRAM": "true",
         "HZN_CITYGRAM": "true"
       }
     },

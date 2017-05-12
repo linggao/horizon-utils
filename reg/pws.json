@@ -11,7 +11,9 @@
         "HZN_PWS": "true",
         "HZN_WUGNAME": "$PWS_WUGNAME",
         "HZN_PWS_MODEL": "$PWS_MODEL",
-        "HZN_PWS_ST_TYPE": "$PWS_ST_TYPE"
+        "MTN_PWS_MODEL": "$PWS_MODEL",
+        "HZN_PWS_ST_TYPE": "$PWS_ST_TYPE",
+        "MTN_PWS_ST_TYPE": "$PWS_ST_TYPE"
       }
     },
     {
