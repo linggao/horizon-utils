@@ -8,7 +8,6 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "HZN_AIRPOLLUTION": "true",
         "HZN_PURPLE_AIR_SENSOR_NAME": "$AIRPOLLUTION_PURPLE_AIR_SENSOR_NAME"
       }
     },

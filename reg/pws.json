@@ -8,7 +8,6 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "HZN_PWS": "true",
         "HZN_WUGNAME": "$PWS_WUGNAME",
         "HZN_PWS_MODEL": "$PWS_MODEL",
         "MTN_PWS_MODEL": "$PWS_MODEL",

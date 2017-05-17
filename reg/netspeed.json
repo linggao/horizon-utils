@@ -8,7 +8,6 @@
       "label": "app",
       "publishable": true,
       "mappings": {
-        "HZN_IS_BANDWIDTH_TEST_ENABLED": "true",
         "HZN_TARGET_SERVER": "$NETSPEED_TARGET_SERVER"
       }
     },

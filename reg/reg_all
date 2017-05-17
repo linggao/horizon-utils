@@ -356,11 +356,7 @@ reg_location_microservice()
         return $RC_SUCCESS
     fi
 
-    if [[ $USE_GPS == "true" ]]; then
-        file_name="$SCRIPT_DIR/location_gps.json"
-    else
-        file_name="$SCRIPT_DIR/location_no_gps.json"
-    fi
+    file_name="$SCRIPT_DIR/location.json"
 
     service_reg=$(envsubst < $file_name)
  
@@ -467,6 +463,7 @@ reg_microservices()
         # register services one by one
         for service in $(echo $SERVICES_TO_ADD | tr "," " "); do
             service_reg=$(envsubst < "$SCRIPT_DIR/$service.json")
+
             if [[ $VERBOSE -eq 1 ]]; then
                 echo "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
             fi
@@ -541,9 +538,9 @@ EOF
 reg_microservice_common_attributes()
 {
     # do not need this if it is second or more time running the script
-    #if [[ $REREG -eq 1 ]]; then
-    #    return $RC_SUCCESS
-    #fi
+    if [[ $REREG -eq 1 ]]; then
+        return $RC_SUCCESS
+    fi
 
     if [[ $VERBOSE -eq 1 ]]; then
         echo "Register common service attributes."
@@ -553,14 +550,6 @@ reg_microservice_common_attributes()
     fn="$SCRIPT_DIR/common.json"
     if [ -f $fn ]; then
         all_attributes=$(envsubst < $fn)
-
-        # make sure the common.js has valid json format
-        ret=$(echo $all_attributes | jq '.' 2>&1)
-        if [ $? -ne 0 ]; then
-            echo -e "The file $fn contains errors:\n $ret\nPlease fix it and re-run this command."
-            return $RC_FAILED_REG_SERVICE_ATTRIBS_ANAX
-        fi
-
         len=$(echo "$all_attributes" | jq 'length')
 
         # check the common attribute one by one, skil the ones that have no data.
