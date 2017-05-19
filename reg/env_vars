@@ -33,7 +33,7 @@ export HA_DEVICE="false"
 ### service
 ####################################################################
 
-# a comma seperated service names to be registered. (netspeed,sdr,citygram,pws,airpollution)
+# a comma seperated service names to be registered. (netspeed,sdr,citygram,pws,airpollution,aural)
 export SERVICES="netspeed,sdr"
 
 

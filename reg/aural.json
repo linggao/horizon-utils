@@ -1,0 +1,25 @@
+{
+  "sensor_url": "https://bluehorizon.network/documentation/aural-device-api",
+  "sensor_name": "aural",
+  "attributes": [
+    {
+      "id": "app",
+      "short_type": "mapped",
+      "label": "app",
+      "publishable": true,
+      "mappings": {
+        "SEND_AUDIO": "$AURAL_SEND_AUDIO"
+      }
+    },
+    {
+      "id": "compute",
+      "short_type": "compute",
+      "label": "Aural audio classification",
+      "publishable": true,
+      "mappings": {
+        "ram": 256,
+        "cpus": 1
+      }
+    }
+  ]
+}
