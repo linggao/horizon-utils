@@ -9,4 +9,5 @@ citygram.json
 pws.json
 airpollution.json
 cputemp.json
+aural.json
 
