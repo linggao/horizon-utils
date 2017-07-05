@@ -63,6 +63,7 @@ Options:
 # This function displays the values of some variables
 disp_env_vars()
 {
+    echo "USE_SNAP=$USE_SNAP"
     echo "EXCH=$EXCH"
     echo "ANAX_API=$ANAX_API"
     echo "USER=$USER, PASSWORD=$PASSWORD, EMAIL=$EMAIL"
@@ -77,8 +78,8 @@ disp_env_vars()
 
 
 ###
-# This function displays how to change the device id and restart horizon.
-display_change_device_and_restart()
+# This function displays how to change the device id and restart bluehorizon snap.
+display_change_device_and_restart_snap()
 {
     echo "  mkdir -p /tmp/horizon; cp /var/snap/bluehorizon/common/config/* /tmp/horizon"
     echo "  snap remove bluehorizon"
@@ -94,6 +95,15 @@ display_change_device_and_restart()
 
     echo "  rm -Rf /tmp/horizon"
     echo "  reg_all $ALL_PARAMES"
+}
+
+###
+# This function displays how to change the device id and restart horizon.service.
+display_change_device_and_restart_horizon()
+{
+    echo "  systemctl stop horizon.service"
+    echo "  change CMTN_DEVICE_ID setting in /etc/default/horizon file."
+    echo "  systemctl start horizon.service"
 }
 
 
@@ -193,8 +203,14 @@ reg_device_to_exchange()
             # device owner does not match current user
             echo "The device ($DEVICE_ID) owner $owner does not match the current user $USER."
             echo "Please modify the USER variable in the $ENV_VARS_FILE_NAME file and rerun this command."
-            echo "Or use a new device id for the device, restart the bluehorizon snap and rerun this command by doing the following: "
-            display_change_device_and_restart
+            if [ $USE_SNAP -eq 1 ]; then
+                echo "Or use a new device id for the device, restart the bluehorizon snap and rerun this command by doing the following: "
+                display_change_device_and_restart_snap
+            else
+                echo "Or use a new device id for the device, restart the horizon.service and rerun this command by doing the following: "
+                display_change_device_and_restart_horizon
+            fi
+
             return $RC_USER_MISMATCH
         fi
 
@@ -618,6 +634,7 @@ reg_microservice_common_attributes()
 
 # save all the paremeters for later use
 ALL_PARAMES=$@
+USE_SNAP=1
 
 # parse the parameters from the command line
 while getopts ":f:h" opt; do
@@ -659,14 +676,24 @@ fi
 # make sure anax is running
 pidof anax > /dev/null
 if [[ $? -ne 0 ]]; then
-    echo "anax is not running. Please install the bluehorizon snap."
+    echo "anax is not running. Please install bluehorizon and horizon pakages or install the bluehorizon snap."
     exit $RC_ANAX_NOT_RUNNING
 fi
+
+snap list 2>&1 |grep bluehorizon
+if [[ $? -ne 0 ]]; then
+    USE_SNAP=0
+fi 
 
 source $ENV_VARS_FILE_NAME
 
 # Global variables
-EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
+if [ $USE_SNAP -eq 1 ]; then
+    EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
+else
+    EXCH=$(cat /etc/horizon/anax.json |jq '.Edge.ExchangeURL')
+    EXCH=$(echo ${EXCH//\"/}) # remove quotes
+fi
 EXCH=${EXCH%/} # remove the last slash if it has one
 ANAX_API="http://localhost:$ANAX_API_PORT"
 REREG=0    # not first time to run this script
@@ -718,8 +745,14 @@ device=$(echo ${device//\"/}) # remove quotes
 if [[ $device != $DEVICE_ID ]]; then
     echo "The new device id $DEVICE_ID does not match the existing device id $device."
     echo "Anax does not support changing device id."
-    echo "Please restart the bluehorizon snap and rerun this command by doing the following: "
-    display_change_device_and_restart
+    if [ $USE_SNAP -eq 1 ]; then
+        echo "Please restart the bluehorizon snap and rerun this command by doing the following: "
+        display_change_device_and_restart_snap
+    else
+        echo "Please restart the horizon.service and rerun this command by doing the following: "
+        display_change_device_and_restart_horizon
+    fi
+
     exit $RC_NOT_SUPPORT_DEVICE_CHANGE
 fi
 
