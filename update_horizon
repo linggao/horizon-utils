@@ -10,10 +10,6 @@
 # setup environmental variables
 source "$(dirname "$(readlink -f "$0")")/env_vars"
 
-EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
-EXCH=${EXCH%/} # remove the last slash if it has one
-ANAX_API="http://localhost:$ANAX_API_PORT"
-
 content="-H Content-Type:application/json"
 curlBasicArgs="-s -w %{http_code} -H Accept:application/json"
 
@@ -22,6 +18,10 @@ RC_SUCCESS=0
 RC_FAILED_REMOVE_SNAP=180
 RC_FAILED_INSTALL_SNAP=181
 RC_NO_DEVICE_ID=182
+RC_FAILED_STOP_HORIZON_SERVICE=183
+RC_FAILED_START_HORIZON_SERVICE=184
+RC_FAILED_UPGRADE_HORIZON_PKG=185
+RC_FAILED_REMOVE_DEVICE_FROM_EXCHANGE=186
 
 
 #####
@@ -91,6 +91,7 @@ remove_workloads() {
     return $RC_SUCCESS
 }
 
+
 #####
 # This function removes bluehorizon snap.
 remove_snap() {
@@ -109,13 +110,35 @@ remove_snap() {
 }
 
 #####
+# This function stops the horizon service and clean the db and necessary files
+# so that the horizen can start up again as if it is new.
+clean_horizon_deb() {
+    # stop the horizon service
+    systemctl stop horizon.service 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to stop horizon service."
+        return $RC_FAILED_STOP_HORIZON_SERVICE
+    fi
+
+    # clean the db and other runtime generated files
+    rm -f /var/horizon/*.db
+    rm -f /etc/horizon/policy.d/*
+}
+
+#####
 # This function removes the device from the exchange
 remove_device() {
     echo "*Delete the device $DEVICE_ID from the exchange"
     reg_dir=$(dirname "$(readlink -f "$0")")
+
+    if [[ -z $DEVICE_ID ]] || [[ -z $EXCH ]]; then
+        echo "DEVICE_ID or EXCH is not set."
+        return $RC_FAILED_REMOVE_DEVICE_FROM_EXCHANGE
+    fi 
+
     if [[ -z $USER ]] || [[ -z $PASSWORD ]]; then
         echo "Please make sure USER and PASSWORD are defined in $reg_dir/env_vars file in order to delete the device from the exchange."
-        return 1
+        return $RC_FAILED_REMOVE_DEVICE_FROM_EXCHANGE
     fi 
 
     # check if the device exists on the exchange
@@ -125,7 +148,7 @@ remove_device() {
         ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
         if ! check_status_code "$ret" 204; then
             echo "failed to delete the device $DEVICE_ID from the exchange. " $(get_message "$ret")
-            return 1
+            return $RC_FAILED_REMOVE_DEVICE_FROM_EXCHANGE
         else
             echo "device $DEVICE_ID deleted from the exchange"
         fi
@@ -174,8 +197,63 @@ install_snap() {
     return $RC_SUCCESS
 }
 
+#####
+# This function updates the deb packages and starts the horizon service with current configuration
+update_horizon_deb() {
+    apt-get update
+    apt-get install --only-upgrade -y horizon bluehorizon
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to upgrade horizon packages."
+        return $RC_FAILED_STOP_HORIZON_SERVICE
+    fi
+
+    # start the horizon service
+    systemctl start horizon.service 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to start horizon service."
+        return $RC_FAILED_UPGRADE_HORIZON_PKG
+    fi
+}
+
+#####
+# This function gets the device id
+get_device_id() {
+    pidof anax > /dev/null
+    if [[ $? -ne 0 ]]; then  
+        # get device id from the device id file when anax is not running.
+        if [ $USE_SNAP -eq 1 ]; then # for snap
+            if [ -f "/var/snap/bluehorizon/common/config/device_id" ]; then
+                DEVICE_ID=$(cat "/var/snap/bluehorizon/common/config/device_id")  
+            elif [ -f "/var/horizon/config/device_id" ]; then
+                DEVICE_ID=$(cat "/var/horizon/config/device_id")
+            else
+                # TODO: create device_id file.
+                echo "please specify /var/horizon/config/device_id file. "
+                return $RC_NO_DEVICE_ID
+            fi
+        else # for deb 
+            if [ -f "/etc/default/horizon" ]; then
+                ret=$(grep CMTN_DEVICE_ID /etc/default/horizon-env)
+                if [ $? -eq 0 ]; then
+                    DEVICE_ID=$(echo $ret |  sed s'/CMTN_DEVICE_ID=\(.*\)$/\1/')
+                fi
+            elif [ -f "/etc/default/horizon-env" ]; then
+                ret=$(grep CMTN_DEVICE_ID /etc/default/horizon-env)
+                if [ $? -eq 0 ]; then
+                    DEVICE_ID=$(echo $ret |  sed s'/CMTN_DEVICE_ID=\(.*\)$/\1/')
+                fi
+            fi
+        fi
+    else
+        # get the DEVICE_ID from anax if it is running.
+        DEVICE_ID=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_DEVICE_ID |sed 's/CMTN_DEVICE_ID=//')
+    fi
+}
+
+
 
 ### The main program starts here
+USE_SNAP=1
 
 # get local snap path (with name) if it is supplied
 snap_path=""
@@ -183,42 +261,59 @@ if [ $# -gt 0 ]; then
     snap_path=$1
 fi
 
+
+dpkg -l | grep horizon
+if [[ $? -eq 0 ]]; then
+    USE_SNAP=0
+fi 
+
+if [ -n "$ENV_VARS_FILE_NAME" ] && [ -f "$ENV_VARS_FILE_NAME" ]; then 
+    source $ENV_VARS_FILE_NAME
+fi
+
+# Global variables
+if [ $USE_SNAP -eq 1 ]; then
+    EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
+else
+    EXCH=$(cat /etc/horizon/anax.json |jq '.Edge.ExchangeURL')
+    EXCH=$(echo ${EXCH//\"/}) # remove quotes
+fi
+EXCH=${EXCH%/} # remove the last slash if it has one
+ANAX_API="http://localhost:$ANAX_API_PORT"
+
+
 # get device id
 if [[ -z $DEVICE_ID ]]; then
-    pidof anax > /dev/null
-    if [[ $? -ne 0 ]]; then
-        # get device id from the device id file when anax is not running.
-        if [ -f "/var/snap/bluehorizon/common/config/device_id" ]; then
-              DEVICE_ID=$(cat "/var/snap/bluehorizon/common/config/device_id")  
-        elif [ -f "/var/horizon/config/device_id" ]; then
-            DEVICE_ID=$(cat "/var/horizon/config/device_id")
-        else
-            # TODO: create device_id file.
-            echo "please specify /var/horizon/config/device_id file. "
-            exit $RC_NO_DEVICE_ID
-        fi
-    else
-        # get the DEVICE_ID from anax if it is running.
-        DEVICE_ID=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_DEVICE_ID |sed 's/CMTN_DEVICE_ID=//')
-    fi
+    get_device_id
 fi
 echo "DEVICE_ID=$DEVICE_ID"
 
 # remove the workloads
 remove_workloads
 
-# remove the old snap
-remove_snap
+
+if [ $USE_SNAP -eq 1 ]; then
+    # remove the old snap
+    remove_snap
+else
+    # clean up deb
+    clean_horizon_deb
+fi
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc
 fi
 
+
 # remove the device from the exchange
 remove_device
 
-# install the new snap
-install_snap $snap_path
+# update and restart
+if [ $USE_SNAP -eq 1 ]; then
+    install_snap $snap_path
+else
+    update_horizon_deb
+fi    
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc
