@@ -434,7 +434,7 @@ get_all_microservices()
     do
 
         service=$(echo $attrib | sed 's/^.*https:\/\/bluehorizon.network\/documentation\/\(.*\)-device-api.*$/\1/')
-        if [[ $service != $attrib ]]; then 
+        if [[ "$service" != "$attrib" ]]; then 
             if [[ -n $service ]]; then
                 all_svcs=$(append_service $service $all_svcs)                    
             fi
