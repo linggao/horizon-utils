@@ -734,7 +734,7 @@ if ! check_status_code "$ret" 200; then
 fi
 
 ret_json=$(get_message "$ret")
-echo $ret_json | jq -er '. | .account.id' > /dev/null
+echo $ret_json | jq -e -r '. | .account.id' > /dev/null
 if [[ $? -eq 0 ]]; then
     REREG=1
 fi
