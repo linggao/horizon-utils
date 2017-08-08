@@ -28,6 +28,7 @@ RC_FAILED_REG_SERVICE_ANAX=110
 RC_FAILED_GET_LOCATION=111
 RC_USER_MISMATCH=112
 RC_BAD_PARAM=113
+RC_FAILED_GET_EXCH_URL=114
 
 RC_REREG_NOT_SUPPORT_USER_CHANGE=120
 RC_NOT_SUPPORT_DEVICE_CHANGE=121
@@ -688,14 +689,35 @@ fi
 source $ENV_VARS_FILE_NAME
 
 # Global variables
-if [ $USE_SNAP -eq 1 ]; then
-    EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
-else
-    EXCH=$(cat /etc/horizon/anax.json |jq '.Edge.ExchangeURL')
-    EXCH=$(echo ${EXCH//\"/}) # remove quotes
-fi
-EXCH=${EXCH%/} # remove the last slash if it has one
 ANAX_API="http://localhost:$ANAX_API_PORT"
+
+if [[ $VERBOSE -eq 1 ]]; then
+    echo "curl $curlBasicArgs \"$ANAX_API/status\""
+fi
+ret=$(curl $curlBasicArgs "$ANAX_API/status")
+
+if ! check_status_code "$ret" 200; then
+    echo "Failed to get status from anax. " $(get_message "$ret")
+fi
+EXCH=$(get_message "$ret" | jq '.configuration.exchange_api')
+
+if [ "$EXCH" == "" ]; then
+    if [ $USE_SNAP -eq 1 ]; then
+        EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
+    else
+        EXCH=$(cat /etc/default/horizon | grep HZN_EXCHANGE_URL |sed 's/HZN_EXCHANGE_URL=//')
+        if [ "$EXCH" == "" ]; then
+            EXCH=$(cat /etc/horizon/anax.json |jq '.Edge.ExchangeURL')
+        fi
+    fi
+fi
+if [ "$EXCH" == "" ]; then
+    echo "Unable to get the exchange url"
+    return
+fi
+EXCH=$(echo ${EXCH//\"/}) # remove quotes
+EXCH=${EXCH%/} # remove the last slash if it has one
+
 REREG=0    # not first time to run this script
 SERVICES_TO_ADD=""  # services to be added
 SERVICES_TO_DEL=""  # services to be deleted

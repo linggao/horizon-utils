@@ -272,15 +272,34 @@ if [ -n "$ENV_VARS_FILE_NAME" ] && [ -f "$ENV_VARS_FILE_NAME" ]; then
 fi
 
 # Global variables
-if [ $USE_SNAP -eq 1 ]; then
-    EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
-else
-    EXCH=$(cat /etc/horizon/anax.json |jq '.Edge.ExchangeURL')
-    EXCH=$(echo ${EXCH//\"/}) # remove quotes
-fi
-EXCH=${EXCH%/} # remove the last slash if it has one
 ANAX_API="http://localhost:$ANAX_API_PORT"
 
+if [[ $VERBOSE -eq 1 ]]; then
+    echo "curl $curlBasicArgs \"$ANAX_API/status\""
+fi
+ret=$(curl $curlBasicArgs "$ANAX_API/status")
+
+if ! check_status_code "$ret" 200; then
+    echo "Failed to get status from anax. " $(get_message "$ret")
+fi
+EXCH=$(get_message "$ret" | jq '.configuration.exchange_api')
+
+if [ "$EXCH" == "" ]; then
+    if [ $USE_SNAP -eq 1 ]; then
+        EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
+    else
+        EXCH=$(cat /etc/default/horizon | grep HZN_EXCHANGE_URL |sed 's/HZN_EXCHANGE_URL=//')
+        if [ "$EXCH" == "" ]; then
+            EXCH=$(cat /etc/horizon/anax.json |jq '.Edge.ExchangeURL')
+        fi
+    fi
+fi
+if [ "$EXCH" == "" ]; then
+    echo "Unable to get the exchange url"
+    return
+fi
+EXCH=$(echo ${EXCH//\"/}) # remove quotes
+EXCH=${EXCH%/} # remove the last slash if it has one
 
 # get device id
 if [[ -z $DEVICE_ID ]]; then
