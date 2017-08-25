@@ -1,5 +1,16 @@
 [
     {
+        "id": "agreementprotocol",
+        "short_type": "agreementprotocol",
+        "label": "Agreement Protocol",
+        "publishable": true,
+        "mappings": {
+            "protocols": [
+              {"Basic":[]}
+            ]
+        }
+    },
+    {
         "id": "metering",
         "short_type": "metering",
         "label": "Metering Policy",
