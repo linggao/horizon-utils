@@ -4,13 +4,8 @@ common.json
 common_sample.json
 airpollutionms.json
 citygramms.json
+cpu.json
 gps.json
 network.json
 pwsms.json
 rtlsdr.json
-workload/airpollution.json
-workload/citygram.json
-workload/location.json
-workload/netspeed.json
-workload/pws.json
-workload/sdr.json
