@@ -1,0 +1,19 @@
+{
+  "sensor_url": "https://bluehorizon.network/microservices/rtlsdr",
+  "sensor_name": "rtlsdr",
+  "sensor_version": "1.0.0",
+  "auto_upgrade": true,
+  "active_upgrade": true,
+  "attributes": [
+    {
+      "id": "compute",
+      "short_type": "compute",
+      "label": "Software Defined Radio",
+      "publishable": true,
+      "mappings": {
+        "ram": 128,
+        "cpus": 1
+      }
+    }
+  ]
+}

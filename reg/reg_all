@@ -29,6 +29,9 @@ RC_FAILED_GET_LOCATION=111
 RC_USER_MISMATCH=112
 RC_BAD_PARAM=113
 RC_FAILED_GET_EXCH_URL=114
+RC_FAILED_GET_WORKLOAD_CONFIG_ANAX=115
+RC_FAILED_POST_WORKLOAD_CONFIG_ANAX=116
+RC_FAILED_DELETE_WORKLOAD_CONFIG_ANAX=117
 
 RC_REREG_NOT_SUPPORT_USER_CHANGE=120
 RC_NOT_SUPPORT_DEVICE_CHANGE=121
@@ -430,16 +433,10 @@ get_all_microservices()
 
     # get all the service names fromt responce.
     all_svcs=""
-    resp=$(get_message "$ret" | jq -c '.attributes[]')
+    resp=$(get_message "$ret" | jq -c '.attributes[].sensor_urls[]')
     for attrib in $resp
     do
-
-        service=$(echo $attrib | sed 's/^.*https:\/\/bluehorizon.network\/documentation\/\(.*\)-device-api.*$/\1/')
-        if [[ "$service" != "$attrib" ]]; then 
-            if [[ -n $service ]]; then
-                all_svcs=$(append_service $service $all_svcs)                    
-            fi
-        fi
+        all_svcs=$(append_service $attrib $all_svcs)
     done
 
     if [[ $VERBOSE -eq 1 ]]; then
@@ -448,18 +445,32 @@ get_all_microservices()
 
 
     # decide what services to add
+    needed_svcs=""
     for svc in $(echo $SERVICES | sed "s/,/ /g")
-    do 
-        if [ "$svc" != "location" ] && [ "${all_svcs#*$svc}" == "$all_svcs" ]; then
-            SERVICES_TO_ADD=$(append_service $svc $SERVICES_TO_ADD)                    
+    do
+        file_name="$SCRIPT_DIR/$svc.json"
+        if [ ! -f $file_name ]; then
+            echo "Error: File $file_name does not exist."
+            continue
+        fi
+
+        url=$(cat $file_name | jq '.sensor_url')
+        if [ -z $url ]; then
+            echo "Error: File $file_name does not have correct format."
+            continue
+        fi
+        needed_svcs=$(append_service $url $needed_svcs)
+
+        if [ "${all_svcs#*$url}" == "$all_svcs" ]; then
+            SERVICES_TO_ADD=$(append_service $svc $SERVICES_TO_ADD)
         fi
     done
 
     # decide what services to delete
-    for svc in $(echo $all_svcs | sed "s/,/ /g")
-    do 
-        if [ "$svc" != "location" ] && [ "${SERVICES#*$svc}" == "$SERVICES" ]; then
-            SERVICES_TO_DEL=$(append_service $svc $SERVICES_TO_DEL)                    
+    for current_svc in $(echo $needed_svcs | sed "s/,/ /g")
+    do
+        if [ "${needed_svcs#*$current_svc}" == "$needed_svcs" ]; then
+            SERVICES_TO_DEL=$(append_service $svc $current_svc)
         fi
     done
 
@@ -469,7 +480,7 @@ get_all_microservices()
 
 ####
 # This function registers the services specified in the SERVICES env variable to anax
-# in order to form agreements with the agbots.
+# in order to setup the microservices for the device.
 reg_microservices()
 {
     # add services
@@ -505,6 +516,89 @@ reg_microservices()
 
     return $RC_SUCCESS
 }
+
+
+#####
+# This furncion deletes all the workload configurations from anax.
+delete_all_workload_configs()
+{
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "Get all registered worload configurations and delete them."
+    fi
+
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "curl $curlBasicArgs \"$ANAX_API/workloadconfig\""
+    fi
+    ret=$(curl $curlBasicArgs "$ANAX_API/workloadconfig")
+
+    # exit out if the api call fails
+    if ! check_status_code "$ret" 200; then
+        echo "Failed to get all the workload configs. " $(get_message "$ret")
+        return $RC_FAILED_GET_WORKLOAD_CONFIG_ANAX
+    fi
+
+    # get all the service names fromt responce.
+    all_wlconf=""
+    resp=$(get_message "$ret")
+    count=$(echo "$resp" | jq -c '.active | length')
+
+
+    for((i=0;i<$count;i++))
+    do
+        body=$(echo "$resp" | jq -c ".active[$i]")
+        if [[ $VERBOSE -eq 1 ]]; then
+            echo "echo \"$body\"  | curl -X DELETE $curlBasicArgs --data @- \"$ANAX_API/workloadconfig\""
+        fi
+        ret=$(echo "$body" | curl -X DELETE $curlBasicArgs --data @- "$ANAX_API/workloadconfig")
+
+        if check_status_code "$ret" 204; then
+            echo "$workload config $body deleted."
+        else
+            echo "Failed to delete workload config $body. " $(get_message "$ret")
+            return $RC_FAILED_DELETE_WORKLOAD_CONFIG_ANAX
+        fi
+
+    done
+
+    return $RC_SUCCESS
+}
+
+
+####
+# This function posts the workload configurations specified in the WORKLOAD_CONFIGS env variable to anax
+# in order to pass the configurations to the workloads.
+reg_workload_configs()
+{
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "Posts workload configurations."
+    fi
+
+    # add services
+    if [[ -z $WORKLOADS_TO_ADD ]]; then
+        # do nothing if no workloads to add
+        echo "No new workload configs to be added."
+    else
+        # register services one by one
+        for workload in $(echo $WORKLOADS_TO_ADD | tr "," " "); do
+            wlconf=$(envsubst < "$SCRIPT_DIR/workload/$workload.json")
+
+            if [[ $VERBOSE -eq 1 ]]; then
+                echo "echo '$wlconf' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/workloadconfig\""
+            fi
+            ret=$(echo "$wlconf" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/workloadconfig")
+
+            if check_status_code "$ret" 201; then
+                echo "workload configuration $wlconf posted."
+            else
+                echo "Failed to post worload configuration $wlconf. " $(get_message "$ret")
+                return $RC_FAILED_POST_WORKLOAD_CONFIG_ANAX
+            fi
+        done
+    fi
+
+    return $RC_SUCCESS
+}
+
 
 ####
 # This function sets the LAT and LON env variables when they are not defined
@@ -797,10 +891,16 @@ if [[ $REREG -eq 0 ]]; then
     SERVICES_TO_ADD=$SERVICES
     SERVICES_TO_DEL=""
 else
+    # delete current workload configurations
+    delete_all_workload_configs
+
     # go through all the service attributes and find the existing services
     # and fill the SERVICES_TO_ADD and SERVICES_TO_DEL variables.
     get_all_microservices
 fi
+
+WORKLOADS_TO_ADD=$WORKLOAD_CONFIGS
+
 
 # display env variables for verbose mode
 if [[ $VERBOSE -eq 1 ]]; then
@@ -843,7 +943,21 @@ if [ $rc != $RC_SUCCESS ]; then
 fi
 
 # register location service
-reg_location_microservice
+#reg_location_microservice
+#rc=$?
+#if [ $rc != $RC_SUCCESS ]; then
+#    exit $rc
+#fi
+
+# delete all existing workload configurations
+delete_all_workload_configs
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+# register workload configurations
+reg_workload_configs
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc

@@ -14,6 +14,8 @@ export EMAIL=
 ####################################################################
 # device
 ####################################################################
+# optional. If not set the reg_all script will create one
+DEVICE_TOKEN=
 
 # optional, these variables will be auto filled if you do not define them here.
 # if you want to fill them manually, you can go to http://www.latlong.net/ to find your gps location
@@ -33,8 +35,11 @@ export HA_DEVICE="false"
 ### service
 ####################################################################
 
-# a comma seperated service names to be registered. (netspeed,sdr,citygram,pws,airpollution,aural)
-export SERVICES="netspeed,sdr"
+# a comma seperated microservice file names to be registered. (gps,network,rtlsdr,pwsms,citygramms,airpollutionms)
+export SERVICES="gps,network,rtlsdr"
+
+# a comma seperated list of workload configuration file names to be posted. (location,netspeed,sdr,pws,citygram,airpollution)
+export WORKLOAD_CONFIGS="location,netspeed,sdr"
 
 
 ### netspeed service related settings

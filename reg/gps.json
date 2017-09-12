@@ -1,0 +1,19 @@
+{
+  "sensor_url": "https://bluehorizon.network/microservices/gps",
+  "sensor_name": "gps",
+  "sensor_version": "2.0.3",
+  "auto_upgrade": true,
+  "active_upgrade": true,
+  "attributes": [
+    {
+      "id": "compute",
+      "short_type": "compute",
+      "label": "gps microservice",
+      "publishable": true,
+      "mappings": {
+        "ram": 128,
+        "cpus": 1
+      }
+    }
+  ]
+}

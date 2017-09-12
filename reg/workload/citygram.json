@@ -1,0 +1,11 @@
+{
+  "workload_url": "https://bluehorizon.network/workloads/citygram",
+  "workload_version": "1.2",
+  "variables": {
+        "HZN_CG_EMAIL": "$CITYGRAM_CG_EMAIL",
+        "HZN_CG_PASS": "$CITYGRAM_CG_PASS",
+        "HZN_CG_RSDNAME": "$CITYGRAM_CG_RSDNAME",
+        "HZN_CG_RSDDESC": "$CITYGRAM_CG_RSDDESC"
+  }
+}
+

@@ -1,0 +1,9 @@
+{
+  "workload_url": "https://bluehorizon.network/workloads/pws",
+  "workload_version": "1.8",
+  "variables": {
+      "HZN_WUGNAME": "$PWS_WUGNAME",
+      "HZN_PWS_MODEL": "$PWS_MODEL"
+  }
+}
+
