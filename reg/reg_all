@@ -853,23 +853,23 @@ ret_json=$(get_message "$ret")
 echo $ret_json | jq -e -r '. | .account.id' > /dev/null
 if [[ $? -eq 0 ]]; then
     REREG=1
-fi
 
-# make sure device id stays the same.
-device=$(echo $ret_json | jq '.id')
-device=$(echo ${device//\"/}) # remove quotes
-if [[ $device != $DEVICE_ID ]]; then
-    echo "The new device id $DEVICE_ID does not match the existing device id $device."
-    echo "Anax does not support changing device id."
-    if [ $USE_SNAP -eq 1 ]; then
-        echo "Please restart the bluehorizon snap and rerun this command by doing the following: "
-        display_change_device_and_restart_snap
-    else
-        echo "Please restart the horizon.service and rerun this command by doing the following: "
-        display_change_device_and_restart_horizon
+    # make sure device id stays the same.
+    device=$(echo $ret_json | jq '.id')
+    device=$(echo ${device//\"/}) # remove quotes
+    if [[ $device != $DEVICE_ID ]]; then
+        echo "The new device id $DEVICE_ID does not match the existing device id $device."
+        echo "Anax does not support changing device id."
+        if [ $USE_SNAP -eq 1 ]; then
+            echo "Please restart the bluehorizon snap and rerun this command by doing the following: "
+            display_change_device_and_restart_snap
+        else
+            echo "Please restart the horizon.service and rerun this command by doing the following: "
+            display_change_device_and_restart_horizon
+        fi
+
+        exit $RC_NOT_SUPPORT_DEVICE_CHANGE
     fi
-
-    exit $RC_NOT_SUPPORT_DEVICE_CHANGE
 fi
 
 if [[ $REREG -eq 1 ]]; then

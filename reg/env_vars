@@ -14,7 +14,8 @@ export EMAIL=
 ####################################################################
 # device
 ####################################################################
-# optional. If not set the reg_all script will create one
+# optional. If not set the default device id will be used and a token will be created by reg_all script
+DEVICE_ID=
 DEVICE_TOKEN=
 
 # optional, these variables will be auto filled if you do not define them here.
