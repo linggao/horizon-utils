@@ -19,7 +19,7 @@
       "id": "app",
       "short_type": "mapped",
       "label": "app",
-      "publishable": true,
+      "publishable": false,
       "mappings": {
         "HZN_CG_EMAIL": "$CITYGRAM_CG_EMAIL",
         "HZN_CG_PASS": "$CITYGRAM_CG_PASS",

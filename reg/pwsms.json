@@ -19,7 +19,7 @@
       "id": "app",
       "short_type": "mapped",
       "label": "app",
-      "publishable": true,
+      "publishable": false,
       "mappings": {
         "HZN_PWS_MODEL": "$PWS_MODEL",
         "MTN_PWS_MODEL": "$PWS_MODEL",
