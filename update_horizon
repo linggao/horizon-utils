@@ -122,7 +122,7 @@ clean_horizon_deb() {
 
     # clean the db and other runtime generated files
     rm -f /var/horizon/*.db
-    rm -f /etc/horizon/policy.d/*
+    rm -Rf /etc/horizon/policy.d/*
 }
 
 #####
@@ -325,7 +325,7 @@ fi
 
 
 # remove the device from the exchange
-remove_device
+# remove_device
 
 # update and restart
 if [ $USE_SNAP -eq 1 ]; then

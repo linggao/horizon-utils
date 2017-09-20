@@ -1,20 +1,30 @@
+###################################################################
+# Important: You must have created a user in your organization 
+# in the exchange before running reg_all script
+###################################################################
+
+
+###################################################################
+# organization
+###################################################################
+# required, the organization the user and device belong to
+export ORGANIZATION=
+
 
 ###################################################################
 # user
 ###################################################################
-
-# required, must be filled before running reg_all.
+# optional, if omitted DEVICE_ID and DEVICE_TOKEN must be filled 
+# and the device must have been created on the exchange 
 export USER=
 export PASSWORD=
-
-# this variable is not needed if the USER exists already
-export EMAIL=
 
 
 ####################################################################
 # device
 ####################################################################
-# optional. If not set the default device id will be used and a token will be created by reg_all script
+# optional. If omitted the USER and PASSWORD must be filled.
+# If not set the default device id will be used and a token will be created by reg_all script.
 DEVICE_ID=
 DEVICE_TOKEN=
 
@@ -29,7 +39,6 @@ export USE_GPS="false"
 # the device has a HA partner (true, false). 
 # If true, please specify partnerID as ["device_id1", "device_id2"] in common.json file 
 export HA_DEVICE="false"
-
 
 
 #################################################################### 

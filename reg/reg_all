@@ -15,7 +15,7 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 # return code
 RC_SUCCESS=0
-RC_ENV_NOT_DEFINED=101
+RC_ENV_NOT_DEFINED_OR_BAD=101
 RC_FAILED_CREATE_USER_EXCH=102
 RC_FAILED_CREATE_DEVICE_EXCH=103
 RC_FAILED_DELETE_DEVICE_EXCH=104
@@ -32,15 +32,17 @@ RC_FAILED_GET_EXCH_URL=114
 RC_FAILED_GET_WORKLOAD_CONFIG_ANAX=115
 RC_FAILED_POST_WORKLOAD_CONFIG_ANAX=116
 RC_FAILED_DELETE_WORKLOAD_CONFIG_ANAX=117
+RC_USER_NOT_EXIST=118
+RC_DEVICE_NOT_EXIST=119
+RC_FAILED_DELETE_AGREEMENT_EXCH=120
 
-RC_REREG_NOT_SUPPORT_USER_CHANGE=120
-RC_NOT_SUPPORT_DEVICE_CHANGE=121
-RC_ANAX_NOT_RUNNING=130
+RC_REREG_NOT_SUPPORT_DEVICE_CHANGE=130
+RC_NOT_SUPPORT_DEVICE_CHANGE=131
+RC_ANAX_NOT_RUNNING=132
 
 
 content="-H Content-Type:application/json"
 curlBasicArgs="-s -w %{http_code} -H Accept:application/json"
-
 
 #####
 # This function displays the usage for this command
@@ -48,10 +50,12 @@ usage()
 {
     echo "Usage: reg_all [-f env_vars_fn]
 
-Registers your horizon username, device, and the services you want it to run. 
-This is an alternative to running the horizon registration UI. Update the 
-env_vars file with your desired settings before running this command. After
-running this command, the horizon agreement bots will negotiate agreements with 
+Registers your horizon device, and the services you want it to run. 
+This is an alternative to running the horizon registration UI. Ask the system 
+administrator to create a user for you in the exchange and then you can use 
+the user, password and organization values to fill the env_vars file. And update
+the env_vars file with your desired settings before running this command. After 
+running this command, the horizon agreement bots will negotiate agreements with
 your device to run the services.
 
 Options:
@@ -62,54 +66,57 @@ Options:
     "
 }
 
+#####
+# This function displays the given message for VERBOSE mode only
+debug_message()
+{
+    # check if the user existes or not
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "[D] $@"
+    fi
+}
+
+#####
+# This function displays the given status message.
+status_message()
+{
+    echo "....$@"   
+}
+
+#####
+# This function displays the given progress message.
+prog_message()
+{
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo -e "\n$@"
+    else   
+        echo -e "$@"
+    fi
+}
 
 #####
 # This function displays the values of some variables
 disp_env_vars()
 {
-    echo "USE_SNAP=$USE_SNAP"
-    echo "EXCH=$EXCH"
-    echo "ANAX_API=$ANAX_API"
-    echo "USER=$USER, PASSWORD=$PASSWORD, EMAIL=$EMAIL"
-    echo "DEVICE_ID=$DEVICE_ID, DEVICE_NAME=$DEVICE_NAME, DEVICE_TOKEN=$DEVICE_TOKEN"
-    echo "SERVICES=$SERVICES"
-    echo "REREG=$REREG"
-    echo "SERVICES_TO_ADD=$SERVICES_TO_ADD"
-    echo "SERVICES_TO_DEL=$SERVICES_TO_DEL"
-    echo "HA_DEVICE=$HA_DEVICE"
-    echo "HA_PARTNERS=$HA_PARTNERS"
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo -e "\nEnvironmental variables:"
+    fi 
+    debug_message "USE_SNAP=$USE_SNAP"
+    debug_message "EXCH=$EXCH"
+    debug_message "ANAX_API=$ANAX_API"
+    debug_message "ORGANIZATION=$ORGANIZATION"
+    debug_message "USER=$USER, PASSWORD=$PASSWORD, EMAIL=$EMAIL"
+    debug_message "DEVICE_ID=$DEVICE_ID, DEVICE_NAME=$DEVICE_NAME, DEVICE_TOKEN=$DEVICE_TOKEN"
+    debug_message "MICROSERVICES=$SERVICES"
+    debug_message "WORKLOAD_CONFIGS=$WORKLOAD_CONFIGS"
+    debug_message "REREG=$REREG"
+    debug_message "SERVICES_TO_ADD=$SERVICES_TO_ADD"
+    debug_message "SERVICES_TO_DEL=$SERVICES_TO_DEL"
+    debug_message "HA_DEVICE=$HA_DEVICE, HA_PARTNERS=$HA_PARTNERS"
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo ""
+    fi 
 }
-
-
-###
-# This function displays how to change the device id and restart bluehorizon snap.
-display_change_device_and_restart_snap()
-{
-    echo "  mkdir -p /tmp/horizon; cp /var/snap/bluehorizon/common/config/* /tmp/horizon"
-    echo "  snap remove bluehorizon"
-    echo "  mkdir -p /var/snap/bluehorizon/common/config/; cp /tmp/horizon/* /var/snap/bluehorizon/common/config/"
-    echo "  (modify /var/snap/bluehorizon/common/config/device_id file)"
-
-    directory_ver=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_DIRECTORY_VERSION |sed 's/CMTN_DIRECTORY_VERSION=//')
-    if [[ $directory_ver == "999" ]]; then
-        echo "  snap install --devmode --edge bluehorizon"
-    else
-        echo "  snap install --devmode --beta bluehorizon"
-    fi
-
-    echo "  rm -Rf /tmp/horizon"
-    echo "  reg_all $ALL_PARAMES"
-}
-
-###
-# This function displays how to change the device id and restart horizon.service.
-display_change_device_and_restart_horizon()
-{
-    echo "  systemctl stop horizon.service"
-    echo "  change CMTN_DEVICE_ID setting in /etc/default/horizon file."
-    echo "  systemctl start horizon.service"
-}
-
 
 #####
 # This function parses the first parameter which is a json structure + a number.
@@ -121,16 +128,13 @@ check_status_code()
     exp_code=$2
 
     rc=$(echo $http_ret | sed 's/.*}\([0-9]*\)$/\1/')
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo $rc,$exp_code 
-    fi
+    debug_message "$rc,$exp_code" 
     if [ $rc -eq $exp_code ]; then
         return 0 # 0 = true
     else
         return 1 # 1 = false
     fi
 }
-
 
 #####
 # This function returns parses the input string which is a json + number. 
@@ -141,101 +145,191 @@ get_message()
     echo $msg
 }
 
+####
+# This function checks the credentials given in the env_vars file are valid or not
+check_cred()
+{
+    # ORGANIZATION must be there
+    if [[ -z $ORGANIZATION ]]; then
+        status_message "Please make sure ORGANIZATION is defined in $ENV_VARS_FILE_NAME file."
+        return $RC_ENV_NOT_DEFINED_OR_BAD
+    fi
+
+    # USER and PASSWORD are optional. but if they are define, they better be godd
+    if [[ -n $USER ]] && [[ -n $PASSWORD ]]; then
+        prog_message "Check USER/PASSWORD credential"
+        check_user
+        rc=$?
+        if [ $rc != $RC_SUCCESS ]; then
+            status_message "Please either create user $USER in the exchange or update USER, PASSWORD and ORGANIZATION with correct values in $ENV_VARS_FILE_NAME file."
+            return $RC_ENV_NOT_DEFINED_OR_BAD
+        fi
+    else
+        prog_message "Check DEVICE_ID/DEVICE_TOKEN credential"
+        # if USER and PASSWORD are not define, DEVICE_ID and DEVICE_TOKEN better be good
+        if [[ -z $DEVICE_TOKEN ]]; then
+            status_message "Please input a valid DEVICE_TOKEN for device $DEVICE_ID in $ENV_VARS_FILE_NAME file."
+            return $RC_ENV_NOT_DEFINED_OR_BAD
+        else
+            check_device_cred
+            rc=$?
+            if [ $rc != $RC_SUCCESS ]; then
+                status_message "Please either create device $DEVICE_ID in the exchange or update DEVICE_ID, DEVICE_TOKEN and ORGANIZATION with correct values in $ENV_VARS_FILE_NAME file."
+                return $RC_ENV_NOT_DEFINED_OR_BAD
+            fi
+        fi
+    fi
+
+    status_message "The credential is good"
+    return $RC_SUCCESS
+}
 
 #####
-# This function registers the user to to exchange if the user does not exists. 
-reg_user() {
-    # check if the user existes or not
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "curl -X POST $curlBasicArgs -H \"Authorization:Basic ${USER}:${PASSWORD}\" \"$EXCH/users/${USER}/confirm\""
-    fi
-    ret=$(curl -X POST $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/users/${USER}/confirm")
-    if check_status_code "$ret" 201; then
-        echo "The user $USER with password $PASSWORD already exists."
-        return $RC_SUCCESS
-    fi
+# This function checks if the user exists or not. 
+check_user() {
+    ENCODED_AUTH=$( echo ${ORGANIZATION}/${USER}:${PASSWORD} | base64 )
+    debug_message "AUTH=${ORGANIZATION}/${USER}:${PASSWORD} encoded"
 
+    # check if the user existes or not
+    debug_message "curl -X POST $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/users/${USER}/confirm\""
+     ret=$(curl -X POST $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/users/${USER}/confirm")
+    if check_status_code "$ret" 201; then
+        debug_message "The user $USER with password $PASSWORD already exists."
+        return $RC_SUCCESS
+    else
+        debug_message "The user $USER does not exists."
+        return $RC_USER_NOT_EXIST
+    fi
+}
+
+
+#####
+# This function registers the user to to exchange
+reg_user() {
     # create the user
     echo "The user $USER does not exist, will create it."
     if [[ -z $EMAIL ]]; then
-        echo "Please make sure EMAIL is defined in $ENV_VARS_FILE_NAME."
-        exit $RC_ENV_NOT_DEFINED
+        status_message "Please make sure EMAIL is defined in $ENV_VARS_FILE_NAME."
+        exit $RC_ENV_NOT_DEFINED_OR_BAD
     fi
+
+    ENCODED_AUTH=$( echo root/root:${ROOT_PASSWORD} | base64 )
+    debug_message "AUTH=root/root:${ROOT_PASSWORD} encoded"
+
     read -d '' user <<EOF
     {  
         "password": "$PASSWORD",
         "email": "$EMAIL"
     }
 EOF
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "echo '$user' | curl $curlBasicArgs -X POST $content --data @- \"$EXCH/users/${USER}\""
-    fi
-    ret=$(echo "$user" | curl $curlBasicArgs -X POST $content --data @- "$EXCH/users/${USER}")
+    debug_message "echo '$user' | curl $curlBasicArgs -X POST $content -H \"Authorization:Basic ${ENCODED_AUTH}\" --data @- \"$EXCH/orgs/${ORGANIZATION}/users/${USER}\""
+    ret=$(echo "$user" | curl $curlBasicArgs -X POST $content -H "Authorization:Basic ${ENCODED_AUTH}" --data @- "$EXCH/orgs/${ORGANIZATION}/users/${USER}")
     if check_status_code "$ret" 201; then
-        echo "User $USER with password $PASSWORD created"
+        status_message "User $USER with password $PASSWORD created"
         return $RC_SUCCESS
     else
-        echo "Failed to create user $USER with password $PASSWORD : " $( get_message "$ret" )
+        status_message "Failed to create user $USER with password $PASSWORD : " $( get_message "$ret" )
         return $RC_FAILED_CREATE_USER_EXCH
+    fi
+}
+
+#####
+# This function checks if the given device id/token are defined in the exchange or not.
+check_device_cred() 
+{
+    ENCODED_AUTH=$( echo ${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} | base64 )
+    debug_message "AUTH=${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} encoded"
+
+    # check if the device existes or not
+    debug_message "curl -X GET $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}\""
+    
+    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}")
+    if check_status_code "$ret" 200; then
+        debug_message "Device $DEVICE_ID with token $DEVICE_TOKEN already exists in the exchange."
+        return $RC_SUCCESS
+    else
+        debug_message "Device $DEVICE_ID with token $DEVICE_TOKEN does not exist in the exchange. " $( get_message "$ret" )
+        return $RC_DEVICE_NOT_EXIST
     fi
 }
 
 
 #####
 # This function registers the device to the echange. If the device with the same id exists,
-# this function will delete the device from the exchange and then create a new device with
-# the same id. However, for re-registration, this fuction will not delete the device, it will
-# just update the token for the device.
+# this function will cleanup the device in the exchange if it is not re-registration.
+# By far, check_cred has been called. user cred and the device cred are verified.
+# we need to handle the case where user cred is valid, but the device has not been created or
+# the device token needs to be updated to the existing device
 reg_device_to_exchange() 
 {
     # check if we have all the necessary environmental variables defined
     if [[ -z $DEVICE_ID ]]; then
-        echo "Please make sure DEVICE_ID is defined in $ENV_VARS_FILE_NAME."
-        return $RC_ENV_NOT_DEFINED
-    fi 
+        status_message "Please make sure DEVICE_ID is defined in $ENV_VARS_FILE_NAME."
+        return $RC_ENV_NOT_DEFINED_OR_BAD
+    fi
+
+
+    # use user name/password as exchange call credential if they are set.
+    # otherwise user device id/token credential.
+    user_cred=0 
+    if [[ -n $USER ]] && [[ -n $PASSWORD ]]; then
+        ENCODED_AUTH=$( echo ${ORGANIZATION}/${USER}:${PASSWORD} | base64 )
+        debug_message "AUTH=${ORGANIZATION}/${USER}:${PASSWORD} encoded"
+        user_cred=1
+    else
+        ENCODED_AUTH=$( echo ${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} | base64 )
+        debug_message "AUTH=${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} encoded"
+    fi         
 
     # check if the device existes or not
     device_exists=0
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "curl -X GET $curlBasicArgs -H \"Authorization:Basic ${USER}:${PASSWORD}\" \"$EXCH/devices/${DEVICE_ID}\""
-    fi
-    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
+
+    debug_message "curl -X GET $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}\""
+    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}")
     if check_status_code "$ret" 200; then
-        owner=$(get_message "$ret" | jq ".devices.\"$DEVICE_ID\".owner")
-        owner=$(echo ${owner//\"/}) # remove quotes
-        if [[ $owner != "$USER" ]]; then
-            # device owner does not match current user
-            echo "The device ($DEVICE_ID) owner $owner does not match the current user $USER."
-            echo "Please modify the USER variable in the $ENV_VARS_FILE_NAME file and rerun this command."
-            if [ $USE_SNAP -eq 1 ]; then
-                echo "Or use a new device id for the device, restart the bluehorizon snap and rerun this command by doing the following: "
-                display_change_device_and_restart_snap
-            else
-                echo "Or use a new device id for the device, restart the horizon.service and rerun this command by doing the following: "
-                display_change_device_and_restart_horizon
-            fi
+        device_exists=1
+        status_message "The device $DEVICE_ID already exists on the exchange."
 
-            return $RC_USER_MISMATCH
+        # verify if the device is owned by the user
+        if [[ -n $USER ]]; then
+            owner=$(get_message "$ret" | jq ".devices.\"${ORGANIZATION}/${DEVICE_ID}\".owner")
+            owner=$(echo ${owner//\"/}) # remove quotes
+            if [[ $owner != "${ORGANIZATION}/${USER}" ]]; then
+                # device owner does not match current user
+                echo "The device ($DEVICE_ID) owner $owner does not match the current user $USER."
+                echo "Please modify the USER variable in the $ENV_VARS_FILE_NAME file and rerun this command."
+                echo "Or use a new DEVICE_ID for the device in the $ENV_VARS_FILE_NAME file"
+
+                return $RC_USER_MISMATCH
+            fi
         fi
 
-        device_exists=1
+        # remove the agreements associated with the device from the exchange
         if [[ $REREG -eq 0 ]]; then
-            echo "The device $DEVICE_ID already exists, will delete it."
-            if [[ $VERBOSE -eq 1 ]]; then
-                echo "curl -X DELETE $curlBasicArgs -H \"Authorization:Basic ${USER}:${PASSWORD}\" \"$EXCH/devices/${DEVICE_ID}\""
-            fi
-            ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
+            prog_message "Delete associated agreements for device $DEVICE_ID from the exchange."
+            debug_message "curl -X DELETE $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}/agreements\""
+            ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}/agreements")
             if check_status_code "$ret" 204 || check_status_code "$ret" 404; then
-                echo "Device $DEVICE_ID deleted."
+                status_message "Agreements deleted."
             else
-                echo "Failed to delete the device $DEVICE_ID from the exchange. " $(get_message "$ret")
-                return $RC_FAILED_DELETE_DEVICE_EXCH
+                status_message "Failed to delete agreements for device $DEVICE_ID from the exchange. " $(get_message "$ret")
+                return $RC_FAILED_DELETE_AGREEMENT_EXCH
             fi
-            device_exists=0
         fi
     fi
 
-    if [[ $device_exists -eq 0 ]]; then 
+    # device does not exist
+    if [[ $device_exists -eq 0 ]]; then
+        if [[ $user_cred -eq 0 ]]; then 
+            # if the user credential is not defined, the device credential must point to an existing device
+            status_message "  Wrong values for DEVICE_ID, DEVICE_TOKEN or ORGANIZATION are defined in $ENV_VARS_FILE_NAME file."
+            return $RC_ENV_NOT_DEFINED_OR_BAD
+        fi
+    fi
+
+    # create device or update the device
+    if [[ $REREG -eq 0 ]]; then 
+        prog_message "Create/update device $DEVICE_ID with token $DEVICE_TOKEN on the exchange."
         # create the device
         read -d '' device <<EOF
         {
@@ -246,25 +340,13 @@ reg_device_to_exchange()
             "softwareVersions": {}
         }
 EOF
-    # the exchange does not support token update yet.
-    # elif [[ $REREG -eq 1 ]]; then
-    #    # for re-registration update the token if the device exists
-    #    read -d '' device <<EOF
-    #    {
-    #        "token": "$DEVICE_TOKEN",
-    #        "name": "$DEVICE_NAME"
-    #    }
-    #EOF
-
-        if [[ $VERBOSE -eq 1 ]]; then
-            echo "echo '$device' | curl -X PUT $curlBasicArgs $content -H \"Authorization:Basic ${USER}:${PASSWORD}\" --data @- \"$EXCH/devices/${DEVICE_ID}\""
-        fi
-        ret=$(echo "$device" | curl -X PUT $curlBasicArgs $content -H "Authorization:Basic ${USER}:${PASSWORD}" --data @- "$EXCH/devices/${DEVICE_ID}")
+        debug_message "echo '$device' | curl -X PUT $curlBasicArgs $content -H \"Authorization:Basic ${ENCODED_AUTH}\" --data @- \"$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}\""
+        ret=$(echo "$device" | curl -X PUT $curlBasicArgs $content -H "Authorization:Basic ${ENCODED_AUTH}" --data @- "$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}")
         if check_status_code "$ret" 201; then
-            echo "Device $DEVICE_ID with token $DEVICE_TOKEN created/updated"
+            status_message "Device created/updated"
             return $RC_SUCCESS
         else
-            echo "Failed to create device $DEVICE_ID with token $DEVICE_TOKEN: " $( get_message "$ret" )
+            status_message "Failed to create/update device: " $( get_message "$ret" )
             return $RC_FAILED_CREATE_DEVICE_EXCH
         fi
     fi
@@ -278,65 +360,32 @@ EOF
 reg_device_to_anax()
 {
     if [[ $REREG -eq 0 ]]; then
+        prog_message "Register device info for $DEVICE_ID, token $DEVICE_TOKEN and organization $ORGANIZATION to anax."
         # check if we have all the necessary environmental variables defined
         if [[ -z $DEVICE_ID ]] || [[ -z $DEVICE_NAME ]] || [[ -z $DEVICE_TOKEN ]]; then
-            echo "Please make sure DEVICE_ID, DEVICE_NAME and DEVICE_TOKEN are defined in $ENV_VARS_FILE_NAME."
-            return $RC_ENV_NOT_DEFINED
+            status_message "Please make sure DEVICE_ID, DEVICE_NAME and DEVICE_TOKEN are defined in $ENV_VARS_FILE_NAME."
+            return $RC_ENV_NOT_DEFINED_OR_BAD
         fi 
 
         # create a new horizondevice account
         read -d '' newhzndevice <<EOF
         {
-            "account": {
-                "id": "$USER",
-                "email": "$EMAIL"
-            },
             "id": "$DEVICE_ID",
-            "name": "$DEVICE_NAME",
+            "organization": "$ORGANIZATION",
+             "name": "$DEVICE_NAME",
             "token": "$DEVICE_TOKEN",
             "ha_device": $HA_DEVICE
         }
 EOF
-        if [[ $VERBOSE -eq 1 ]]; then
-            echo "echo '$newhzndevice' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/horizondevice\""
-        fi
+        debug_message "echo '$newhzndevice' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/horizondevice\""
         ret=$(echo "$newhzndevice" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/horizondevice")
         if check_status_code "$ret" 201; then
-            echo "Device info created in anax for device $DEVICE_ID with token $DEVICE_TOKEN."
+            status_message "Device registered in ananx."
             rc=$RC_SUCCESS
         else
-            echo "Failed to create the device info in anax for device $DEVICE_ID with token $DEVICE_TOKEN: " $( get_message "$ret" )
+            status_message "Failed to register the device info in anax: " $( get_message "$ret" )
             rc=$RC_FAILED_CREATE_DEVICE_ANAX
         fi
-    else
-        # the horizondevice account has been created, update it with new device id and token. 
-        read -d '' updatehzntoken <<EOF
-        {
-            "account": {
-            "id": "$USER"
-            },
-            "name": "$DEVICE_NAME",
-            "token": "$DEVICE_TOKEN",
-            "ha_device": $HA_DEVICE
-        }
-EOF
-    #    echo "anax does not support token update yet."
-    #    if [[ $VERBOSE -eq 1 ]]; then
-    #        echo -e "\n[D] hzntoken payload: $updatehzntoken"
-    #    fi
-
-    #    if [[ $VERBOSE -eq 1 ]]; then
-    #        echo "echo '$updatehzntoken' | curl -X PATCH $curlBasicArgs --data @- \"$ANAX_API/horizondevice\""
-    #    fi
-    #    ret=$(echo "$updatehzntoken" | curl -X PATCH $curlBasicArgs --data @- "$ANAX_API/horizondevice")
-    #    if check_status_code "$ret" 200; then
-    #        echo "Device info updated in anax for device $DEVICE_ID with token $DEVICE_TOKEN."
-    #        rc=$RC_SUCCESS
-    #    else
-    #        echo "Failed to update the device info in anax for device $DEVICE_ID with token $DEVICE_TOKEN: " $( get_message "$ret" )
-    #        rc=$RC_FAILED_UPDATE_DEVICE_ANAX
-    #    fi
-
     fi
 
     return $rc
@@ -351,17 +400,13 @@ reg_commom_attribute()
 
     atype=$(echo "$attribute" | jq '.short_type')
 
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "echo '$attribute' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service/attribute\""
-    fi
+    debug_message "echo '$attribute' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service/attribute\""
     ret=$(echo "$attribute" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service/attribute")
     if check_status_code "$ret" 201 || check_status_code "$ret" 200; then
-        if [[ $VERBOSE -eq 1 ]]; then
-            echo "$atype common attribute added to anax for all the services."
-        fi
+        status_message  "$atype common attribute added to anax."
         return $RC_SUCCESS
     else
-        echo "Failed to add $atype common attribute to anax. " $(get_message "$ret")
+        status_message "Failed to add $atype common attribute to anax. " $(get_message "$ret")
         return $RC_FAILED_REG_SERVICE_ATTRIBS_ANAX
     fi 
 }
@@ -376,18 +421,17 @@ reg_location_microservice()
         return $RC_SUCCESS
     fi
 
+    prog_message "Register location service to anax."
     file_name="$SCRIPT_DIR/location.json"
 
     service_reg=$(envsubst < $file_name)
  
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
-    fi
+    debug_message "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
     ret=$(echo "$service_reg" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
     if check_status_code "$ret" 201; then
-        echo "location service registered."
+        status_message "location service registered."
     else
-        echo "Failed to register location services. " $(get_message "$ret")
+        status_message "Failed to register location services. " $(get_message "$ret")
         return $RC_FAILED_REG_SERVICE_ANAX
     fi
   
@@ -416,18 +460,14 @@ append_service()
 # This furncion get all the registered services from anax and fill the SERVICES_TO_ADD and SERVICES_TO_DEL variables.
 get_all_microservices()
 {
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "Get all registered service attributes:"
-    fi
+    debug_message "Get all registered service attributes:"
 
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "curl $curlBasicArgs \"$ANAX_API/service/attribute\""
-    fi
+    debug_message "curl $curlBasicArgs \"$ANAX_API/service/attribute\""
     ret=$(curl $curlBasicArgs "$ANAX_API/service/attribute")
 
     # exit out if the api call fails
     if ! check_status_code "$ret" 200; then
-        echo "Failed to get all the services. " $(get_message "$ret")
+        status_message "Failed to get all the services. " $(get_message "$ret")
         return $RC_FAILED_GET_SERVICE_ANAX
     fi
 
@@ -439,10 +479,7 @@ get_all_microservices()
         all_svcs=$(append_service $attrib $all_svcs)
     done
 
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "all_svcs=$all_svcs"
-    fi
-
+    debug_message "all_svcs=$all_svcs"
 
     # decide what services to add
     needed_svcs=""
@@ -450,13 +487,13 @@ get_all_microservices()
     do
         file_name="$SCRIPT_DIR/$svc.json"
         if [ ! -f $file_name ]; then
-            echo "Error: File $file_name does not exist."
+            status_message "Error: File $file_name does not exist."
             continue
         fi
 
         url=$(cat $file_name | jq '.sensor_url')
         if [ -z $url ]; then
-            echo "Error: File $file_name does not have correct format."
+            status_message "Error: File $file_name does not have correct format."
             continue
         fi
         needed_svcs=$(append_service $url $needed_svcs)
@@ -483,24 +520,23 @@ get_all_microservices()
 # in order to setup the microservices for the device.
 reg_microservices()
 {
+    prog_message "Register microservices"
     # add services
     if [[ -z $SERVICES_TO_ADD ]]; then
         # do nothing if no services to add
-        echo "No new services to be added."
+        status_message "No new services to be added."
     else
         # register services one by one
         for service in $(echo $SERVICES_TO_ADD | tr "," " "); do
             service_reg=$(envsubst < "$SCRIPT_DIR/$service.json")
 
-            if [[ $VERBOSE -eq 1 ]]; then
-                echo "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
-            fi
+            debug_message "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
             ret=$(echo "$service_reg" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
 
             if check_status_code "$ret" 201; then
-                echo "$service service registered."
+                status_message "$service service registered."
             else
-                echo "Failed to register $service services. " $(get_message "$ret")
+                status_message "Failed to register $service services. " $(get_message "$ret")
                 return $RC_FAILED_REG_SERVICE_ANAX
             fi
         done
@@ -509,9 +545,9 @@ reg_microservices()
     # delete services
     if [[ -z $SERVICES_TO_DEL ]]; then
         # do nothing if no services to delete
-        echo "No services to be deleted."
+        status_message "No services to be deleted."
     else
-        echo "Services to be deleted are: $SERVICES_TO_DEL. However anax does not support deleting services yet."
+        status_message "Services to be deleted are: $SERVICES_TO_DEL. However anax does not support deleting services yet."
     fi
 
     return $RC_SUCCESS
@@ -522,18 +558,14 @@ reg_microservices()
 # This furncion deletes all the workload configurations from anax.
 delete_all_workload_configs()
 {
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "Get all registered worload configurations and delete them."
-    fi
+    prog_message "Delete existing workload configurations from anax."
 
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "curl $curlBasicArgs \"$ANAX_API/workloadconfig\""
-    fi
+    debug_message "curl $curlBasicArgs \"$ANAX_API/workloadconfig\""
     ret=$(curl $curlBasicArgs "$ANAX_API/workloadconfig")
 
     # exit out if the api call fails
     if ! check_status_code "$ret" 200; then
-        echo "Failed to get all the workload configs. " $(get_message "$ret")
+        status_message "Failed to get all the workload configs. " $(get_message "$ret")
         return $RC_FAILED_GET_WORKLOAD_CONFIG_ANAX
     fi
 
@@ -543,18 +575,17 @@ delete_all_workload_configs()
     count=$(echo "$resp" | jq -c '.active | length')
 
 
-    for((i=0;i<$count;i++))
+    for ((i=0;i<$count;i++))
     do
         body=$(echo "$resp" | jq -c ".active[$i]")
-        if [[ $VERBOSE -eq 1 ]]; then
-            echo "echo \"$body\"  | curl -X DELETE $curlBasicArgs --data @- \"$ANAX_API/workloadconfig\""
-        fi
+        name=$(basename $(echo $body | jq -c '.workload_url'))
+        debug_message "echo \"$body\"  | curl -X DELETE $curlBasicArgs --data @- \"$ANAX_API/workloadconfig\""
         ret=$(echo "$body" | curl -X DELETE $curlBasicArgs --data @- "$ANAX_API/workloadconfig")
 
         if check_status_code "$ret" 204; then
-            echo "$workload config $body deleted."
+            status_message "Workload configuration $name deleted from anax."
         else
-            echo "Failed to delete workload config $body. " $(get_message "$ret")
+            status_message "Failed to delete workload configuration $name from anax. " $(get_message "$ret")
             return $RC_FAILED_DELETE_WORKLOAD_CONFIG_ANAX
         fi
 
@@ -569,28 +600,24 @@ delete_all_workload_configs()
 # in order to pass the configurations to the workloads.
 reg_workload_configs()
 {
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "Posts workload configurations."
-    fi
+    prog_message "Register workload configurations to anax."
 
     # add services
     if [[ -z $WORKLOADS_TO_ADD ]]; then
         # do nothing if no workloads to add
-        echo "No new workload configs to be added."
+        status_message "No new workload configs to be added."
     else
         # register services one by one
         for workload in $(echo $WORKLOADS_TO_ADD | tr "," " "); do
             wlconf=$(envsubst < "$SCRIPT_DIR/workload/$workload.json")
 
-            if [[ $VERBOSE -eq 1 ]]; then
-                echo "echo '$wlconf' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/workloadconfig\""
-            fi
+            debug_message "echo '$wlconf' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/workloadconfig\""
             ret=$(echo "$wlconf" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/workloadconfig")
 
             if check_status_code "$ret" 201; then
-                echo "workload configuration $wlconf posted."
+                status_message "Workload configuration $workload registered in anax."
             else
-                echo "Failed to post worload configuration $wlconf. " $(get_message "$ret")
+                status_message "Failed to rggister worload configuration $workload in anax. " $(get_message "$ret")
                 return $RC_FAILED_POST_WORKLOAD_CONFIG_ANAX
             fi
         done
@@ -609,6 +636,8 @@ set_latlon()
         return $RC_SUCCESS
     fi
 
+    prog_message "Set device location in anax. "
+
     # get lat and lon of the device if not defined
     if [[ -z $LAT ]] || [[ -z $LON ]]; then
         ret=$(curl $curlBasicArgs "http://ip-api.com/json")
@@ -620,9 +649,7 @@ set_latlon()
         LON=$(get_message "$ret" | jq '.lon')
     fi
 
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "LAT=$LAT, LON=$LON"
-    fi
+    debug_message "LAT=$LAT, LON=$LON"
 
     # register location attibutes for all services
     read -d '' locationattribute <<EOF
@@ -653,9 +680,7 @@ reg_microservice_common_attributes()
         return $RC_SUCCESS
     fi
 
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "Register common service attributes."
-    fi
+    prog_message "Register common service attributes in anax."
 
     # only do it when the file exists
     fn="$SCRIPT_DIR/common.json"
@@ -707,20 +732,18 @@ reg_microservice_common_attributes()
                         return $rc
                     fi
                 else
-                    if [[ $VERBOSE -eq 1 ]]; then
-                        echo "Not register $atype common attribute because data is not defined."
-                    fi
+                    debug_message "Not register $atype common attribute because data is not defined."
                 fi
             fi
         done
     else
-        if [[ $VERBOSE -eq 1 ]]; then
-            echo "The file $fn does not exist."
-        fi
+        debug_message "The file $fn does not exist."
     fi
 
     return $RC_SUCCESS
 }
+
+
 
 
 ########################################################
@@ -775,23 +798,23 @@ if [[ $? -ne 0 ]]; then
     exit $RC_ANAX_NOT_RUNNING
 fi
 
-snap list 2>&1 |grep bluehorizon
-if [[ $? -ne 0 ]]; then
+dpkg -l 2>&1 |grep -q horizon  
+if [[ $? -eq 0 ]]; then
     USE_SNAP=0
 fi 
 
+# set USER to empty so that it does not take the value from the os
+USER=""
 source $ENV_VARS_FILE_NAME
 
 # Global variables
 ANAX_API="http://localhost:$ANAX_API_PORT"
 
-if [[ $VERBOSE -eq 1 ]]; then
-    echo "curl $curlBasicArgs \"$ANAX_API/status\""
-fi
+debug_message "curl $curlBasicArgs \"$ANAX_API/status\""
 ret=$(curl $curlBasicArgs "$ANAX_API/status")
 
 if ! check_status_code "$ret" 200; then
-    echo "Failed to get status from anax. " $(get_message "$ret")
+    status_message "Failed to get status from anax. " $(get_message "$ret")
 fi
 EXCH=$(get_message "$ret" | jq '.configuration.exchange_api')
 
@@ -816,71 +839,54 @@ REREG=0    # not first time to run this script
 SERVICES_TO_ADD=""  # services to be added
 SERVICES_TO_DEL=""  # services to be deleted
 
-# define the necessary environmental variables
+
+if [[ -z $HA_DEVICE ]]; then
+    HA_DEVICE="false"
+elif [ $HA_DEVICE == "true" ]; then
+    debug_message "Info: Please make sure partnerID is defined in $SCRIPT_DIR/common.json file for the 'ha' attribute because HA_DEVICE is \"true\".
+  You can use \"http://<ha_partner_ip>/horizondevice\" on the browser or 
+  run \"curl -s http://<ha_partner_ip>/horizendevice | jq '.id'\" to get a ha partner's id."
+fi
+
+# check if this is re-registration
+debug_message "curl $curlBasicArgs \"$ANAX_API/horizondevice\""
+ret=$(curl $curlBasicArgs "$ANAX_API/horizondevice")
+if ! check_status_code "$ret" 200; then
+    status_message "Failed to get device information from anax api. " $(get_message "$ret")
+    exit $RC_FAILED_GET_DEVICE_INFO_ANAX
+fi
+
+ret_json=$(get_message "$ret")
+echo $ret_json | jq -e -r '. | .organization' > /dev/null
+if [[ $? -eq 0 ]]; then
+    REREG=1
+fi
+
+# get DEVICE_ID and DEVICE_NAME
+device=$(echo $ret_json | jq '.id')
+device=$(echo ${device//\"/}) # remove quotes
 if [[ -z $DEVICE_ID ]]; then
-    DEVICE_ID=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_DEVICE_ID |sed 's/CMTN_DEVICE_ID=//')
+    DEVICE_ID=$device
 fi
 if [[ -z $DEVICE_NAME ]]; then
     DEVICE_NAME=$DEVICE_ID
 fi
 
-if [[ -z $USER ]] || [[ -z $PASSWORD ]]; then
-    echo "Please make sure USER and PASSWORD are defined in $ENV_VARS_FILE_NAME."
-    exit $RC_ENV_NOT_DEFINED
-fi 
-
-if [[ -z $HA_DEVICE ]]; then
-    HA_DEVICE="false"
-elif [ $HA_DEVICE == "true" ]; then
-    if [[ $VERBOSE -eq 1 ]]; then
-        echo "Info: Please make sure partnerID is defined in $SCRIPT_DIR/common.json file for the 'ha' attribute because HA_DEVICE is \"true\"."
-        echo "You can use \"http://<ha_partner_ip>/horizondevice\" on the browser or "
-        echo "run \"curl -s http://<ha_partner_ip>/horizendevice | jq '.id'\" to get a ha partner's id."
-    fi
-fi
-
-# check if this is re-registration
-if [[ $VERBOSE -eq 1 ]]; then
-    echo "curl $curlBasicArgs \"$ANAX_API/horizondevice\""
-fi
-ret=$(curl $curlBasicArgs "$ANAX_API/horizondevice")
-if ! check_status_code "$ret" 200; then
-    echo "Failed to get device information from anax api. " $(get_message "$ret")
-    exit $RC_FAILED_GET_DEVICE_INFO_ANAX
-fi
-
-ret_json=$(get_message "$ret")
-echo $ret_json | jq -e -r '. | .account.id' > /dev/null
-if [[ $? -eq 0 ]]; then
-    REREG=1
-
-    # make sure device id stays the same.
-    device=$(echo $ret_json | jq '.id')
-    device=$(echo ${device//\"/}) # remove quotes
+# make sure the device id does not get changed for re-registration
+if [ $REREG -eq 1 ]; then
+    # for regeg, make sure the device is did not get changed
     if [[ $device != $DEVICE_ID ]]; then
         echo "The new device id $DEVICE_ID does not match the existing device id $device."
         echo "Anax does not support changing device id."
-        if [ $USE_SNAP -eq 1 ]; then
-            echo "Please restart the bluehorizon snap and rerun this command by doing the following: "
-            display_change_device_and_restart_snap
-        else
-            echo "Please restart the horizon.service and rerun this command by doing the following: "
-            display_change_device_and_restart_horizon
-        fi
-
         exit $RC_NOT_SUPPORT_DEVICE_CHANGE
     fi
 fi
 
-if [[ $REREG -eq 1 ]]; then
-    # make sure user is the same for re-registration
-    user=$(echo $ret_json | jq '.account.id')
-    user=$(echo ${user//\"/}) # remove quotes
-    if [[ $user != $USER ]]; then
-        echo "The new user name $USER does not match the existing user name $user."
-        echo "Re-registration does not support the change of user."
-        exit $RC_REREG_NOT_SUPPORT_USER_CHANGE
-    fi
+# check the user defined credentails
+check_cred
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
 fi
 
 if [[ $REREG -eq 0 ]]; then
@@ -903,25 +909,16 @@ WORKLOADS_TO_ADD=$WORKLOAD_CONFIGS
 
 
 # display env variables for verbose mode
-if [[ $VERBOSE -eq 1 ]]; then
-    disp_env_vars
-fi
+disp_env_vars
 
-# register user on exchange
-reg_user
-rc=$?
-if [ $rc != $RC_SUCCESS ]; then
-    exit $rc
-fi
-
-# register device on exchange
+# register device on exchange if needed
 reg_device_to_exchange
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc
 fi
 
-# register device and user to anax
+# register device to anax
 reg_device_to_anax
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
@@ -937,20 +934,6 @@ fi
 
 # register other common attributes from common.json
 reg_microservice_common_attributes
-rc=$?
-if [ $rc != $RC_SUCCESS ]; then
-    exit $rc
-fi
-
-# register location service
-#reg_location_microservice
-#rc=$?
-#if [ $rc != $RC_SUCCESS ]; then
-#    exit $rc
-#fi
-
-# delete all existing workload configurations
-delete_all_workload_configs
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc
