@@ -5,11 +5,13 @@
 
 
 ###################################################################
-# organization
+# organization and pattern
 ###################################################################
 # required, the organization the user and device belong to
 export ORGANIZATION=
 
+# optional, the name of the pattern that will be run on the device
+export PATTERN=
 
 ###################################################################
 # user

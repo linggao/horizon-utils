@@ -241,9 +241,9 @@ check_device_cred()
     debug_message "AUTH=${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} encoded"
 
     # check if the device existes or not
-    debug_message "curl -X GET $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}\""
+    debug_message "curl -X GET $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}\""
     
-    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}")
+    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}")
     if check_status_code "$ret" 200; then
         debug_message "Device $DEVICE_ID with token $DEVICE_TOKEN already exists in the exchange."
         return $RC_SUCCESS
@@ -284,15 +284,15 @@ reg_device_to_exchange()
     # check if the device existes or not
     device_exists=0
 
-    debug_message "curl -X GET $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}\""
-    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}")
+    debug_message "curl -X GET $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}\""
+    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}")
     if check_status_code "$ret" 200; then
         device_exists=1
         status_message "The device $DEVICE_ID already exists on the exchange."
 
         # verify if the device is owned by the user
         if [[ -n $USER ]]; then
-            owner=$(get_message "$ret" | jq ".devices.\"${ORGANIZATION}/${DEVICE_ID}\".owner")
+            owner=$(get_message "$ret" | jq ".nodes.\"${ORGANIZATION}/${DEVICE_ID}\".owner")
             owner=$(echo ${owner//\"/}) # remove quotes
             if [[ $owner != "${ORGANIZATION}/${USER}" ]]; then
                 # device owner does not match current user
@@ -307,8 +307,8 @@ reg_device_to_exchange()
         # remove the agreements associated with the device from the exchange
         if [[ $REREG -eq 0 ]]; then
             prog_message "Delete associated agreements for device $DEVICE_ID from the exchange."
-            debug_message "curl -X DELETE $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}/agreements\""
-            ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}/agreements")
+            debug_message "curl -X DELETE $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}/agreements\""
+            ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}/agreements")
             if check_status_code "$ret" 204 || check_status_code "$ret" 404; then
                 status_message "Agreements deleted."
             else
@@ -335,13 +335,15 @@ reg_device_to_exchange()
         {
             "token": "$DEVICE_TOKEN",
             "name": "$DEVICE_NAME",
+            "pattern": "",
             "registeredMicroservices": [],
             "msgEndPoint": "",
+            "publicKey": "",
             "softwareVersions": {}
         }
 EOF
-        debug_message "echo '$device' | curl -X PUT $curlBasicArgs $content -H \"Authorization:Basic ${ENCODED_AUTH}\" --data @- \"$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}\""
-        ret=$(echo "$device" | curl -X PUT $curlBasicArgs $content -H "Authorization:Basic ${ENCODED_AUTH}" --data @- "$EXCH/orgs/${ORGANIZATION}/devices/${DEVICE_ID}")
+        debug_message "echo '$device' | curl -X PUT $curlBasicArgs $content -H \"Authorization:Basic ${ENCODED_AUTH}\" --data @- \"$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}\""
+        ret=$(echo "$device" | curl -X PUT $curlBasicArgs $content -H "Authorization:Basic ${ENCODED_AUTH}" --data @- "$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}")
         if check_status_code "$ret" 201; then
             status_message "Device created/updated"
             return $RC_SUCCESS
@@ -372,7 +374,8 @@ reg_device_to_anax()
         {
             "id": "$DEVICE_ID",
             "organization": "$ORGANIZATION",
-             "name": "$DEVICE_NAME",
+            "pattern": "$PATTERN",
+            "name": "$DEVICE_NAME",
             "token": "$DEVICE_TOKEN",
             "ha_device": $HA_DEVICE
         }
