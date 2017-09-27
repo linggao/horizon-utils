@@ -1,9 +1,9 @@
 [
     {
-        "id": "metering",
-        "short_type": "metering",
+        "type": "MappedAttributes",
         "label": "Metering Policy",
         "publishable": true,
+        "host_only": false,
         "mappings": {
             "tokens": 2,
             "perTimeUnit": "hour",
@@ -11,19 +11,19 @@
         }
     },
     {
-        "id": "property",
-        "short_type": "property",
+        "type": "PropertyAttributes",
         "label": "Property",
         "publishable": true,
+        "host_only": false,
         "mappings": {
             "mykey1":true
         }
     },
     {
-        "id": "counterpartyproperty",
-        "short_type": "counterpartyproperty",
+        "type": "CounterPartyPropertyAttributes",
         "label": "CounterParty Property",
         "publishable": true,
+        "host_only": false,
         "mappings": {
             "expression": {
                 "and": [
@@ -33,10 +33,10 @@
         }
     },
     {
-        "id": "ha",
-        "short_type": "ha",
+        "type": "HAAttributes",
         "label": "HA Facts",
         "publishable": false,
+        "host_only": false,
         "mappings": {
             "partnerID": ["device_id1", "device_id2"]
         }

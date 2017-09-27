@@ -6,10 +6,10 @@
   "active_upgrade": true,
   "attributes": [
     {
-      "id": "compute",
-      "short_type": "compute",
+      "type": "ComputeAttributes",
       "label": "PurpleAir (air pollution sensing)",
       "publishable": true,
+      "host_only": false,
       "mappings": {
         "ram": 128,
         "cpus": 1

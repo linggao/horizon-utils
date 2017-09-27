@@ -6,20 +6,20 @@
   "active_upgrade": true,
   "attributes": [
     {
-      "id": "compute",
-      "short_type": "compute",
+      "type": "ComputeAttributes",
       "label": "NYU Citygram (noise pollution analysis)",
       "publishable": true,
+      "host_only": false,
       "mappings": {
         "ram": 256,
         "cpus": 1
       }
     },
     {
-      "id": "app",
-      "short_type": "mapped",
+      "type": "MappedAttributes",
       "label": "app",
       "publishable": false,
+      "host_only": false,
       "mappings": {
         "HZN_CG_EMAIL": "$CITYGRAM_CG_EMAIL",
         "HZN_CG_PASS": "$CITYGRAM_CG_PASS",

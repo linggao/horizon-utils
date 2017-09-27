@@ -401,10 +401,10 @@ reg_commom_attribute()
 {
     attribute=$1
 
-    atype=$(echo "$attribute" | jq '.short_type')
+    atype=$(echo "$attribute" | jq '.type')
 
-    debug_message "echo '$attribute' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service/attribute\""
-    ret=$(echo "$attribute" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service/attribute")
+    debug_message "echo '$attribute' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/attribute\""
+    ret=$(echo "$attribute" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/attribute")
     if check_status_code "$ret" 201 || check_status_code "$ret" 200; then
         status_message  "$atype common attribute added to anax."
         return $RC_SUCCESS
@@ -465,8 +465,8 @@ get_all_microservices()
 {
     debug_message "Get all registered service attributes:"
 
-    debug_message "curl $curlBasicArgs \"$ANAX_API/service/attribute\""
-    ret=$(curl $curlBasicArgs "$ANAX_API/service/attribute")
+    debug_message "curl $curlBasicArgs \"$ANAX_API/attribute\""
+    ret=$(curl $curlBasicArgs "$ANAX_API/attribute")
 
     # exit out if the api call fails
     if ! check_status_code "$ret" 200; then
@@ -657,10 +657,10 @@ set_latlon()
     # register location attibutes for all services
     read -d '' locationattribute <<EOF
     {
-        "id": "location",
-        "short_type": "location",
+        "type": "LocationAttributes",
         "label": "Registered Location Facts",
         "publishable": false,
+        "host_only": false,
         "mappings": {
             "lat": "$LAT",
             "lon": "$LON",
@@ -696,30 +696,30 @@ reg_microservice_common_attributes()
         do
             attribute=$(echo "$all_attributes" | jq "values[$i]")
             if [[ -n $attribute ]]; then
-                # get short_type and remove quotes
-                atype=$(echo "$attribute" | jq '.short_type' | sed "s/\"//g;s/'//g")
+                # get type and remove quotes
+                atype=$(echo "$attribute" | jq '.type' | sed "s/\"//g;s/'//g")
 
                 reg=1
                 case $atype in
-                    "ha")
+                    "HAAttributes")
                         v=$(echo "$attribute" | jq ".mappings.partnerID")
                         if [ -z "$v" ] || [ "$v" == "[]" ] || [ "$v" == "null" ]; then
                             reg=0
                         fi
                         ;;
-                    "metering")
+                    "MeteringAttributes")
                         v=$(echo "$attribute" | jq ".mappings.tokens")
                         if [ -z "$v" ] || [ "$v" == "0" ] || [ "$v" == "null" ]; then
                             reg=0
                         fi
                         ;;
-                    "property")
+                    "PropertyAttributes")
                         v=$(echo "$attribute" | jq ".mappings")
                         if [ -z "$v" ] || [ "$v" == "{}" ] || [ "$v" == "null" ]; then
                             reg=0
                         fi
                         ;;
-                    "counterpartyproperty")
+                    "CounterPartyPropertyAttributes")
                         v=$(echo "$attribute" | jq ".mappings.expression")
                         if [ -z "$v" ] || [ "$v" == "{}" ] || [ "$v" == "null" ]; then
                             reg=0
@@ -854,25 +854,33 @@ fi
 # check if this is re-registration
 debug_message "curl $curlBasicArgs \"$ANAX_API/horizondevice\""
 ret=$(curl $curlBasicArgs "$ANAX_API/horizondevice")
-if ! check_status_code "$ret" 200; then
-    status_message "Failed to get device information from anax api. " $(get_message "$ret")
-    exit $RC_FAILED_GET_DEVICE_INFO_ANAX
-fi
-
-ret_json=$(get_message "$ret")
-echo $ret_json | jq -e -r '. | .organization' > /dev/null
-if [[ $? -eq 0 ]]; then
+if check_status_code "$ret" 200; then
     REREG=1
+    device=$(echo $ret | jq '.id')
+    device=$(echo ${device//\"/}) # remove quotes
+    if [[ -z $DEVICE_ID ]]; then
+        DEVICE_ID=$device
+    elif [[ $DEVICE_ID != $device ]]; then
+        echo "Reregistration does not support chaning of device id (old: $device, new: $DEVICE_ID)."
+        exit $RC_NOT_SUPPORT_DEVICE_CHANGE
+    fi
+else
+    if [[ -z $DEVICE_ID ]]; then
+        if [ -f "/etc/default/horizon" ]; then
+            ret=$(grep CMTN_DEVICE_ID /etc/default/horizon)
+            if [ $? -eq 0 ]; then
+                DEVICE_ID=$(echo $ret |  sed s'/CMTN_DEVICE_ID=\(.*\)$/\1/')
+            fi
+        fi
+    fi
 fi
-
-# get DEVICE_ID and DEVICE_NAME
-device=$(echo $ret_json | jq '.id')
-device=$(echo ${device//\"/}) # remove quotes
 if [[ -z $DEVICE_ID ]]; then
-    DEVICE_ID=$device
-fi
-if [[ -z $DEVICE_NAME ]]; then
-    DEVICE_NAME=$DEVICE_ID
+    echo "Please define DEVICE_ID in $ENV_VARS_FILE_NAME file."
+    exit $RC_BAD_PARAM
+else
+    if [[ -z $DEVICE_NAME ]]; then
+        DEVICE_NAME=$DEVICE_ID
+    fi
 fi
 
 # make sure the device id does not get changed for re-registration
