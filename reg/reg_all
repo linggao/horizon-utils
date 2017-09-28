@@ -603,7 +603,7 @@ delete_all_workload_configs()
 # in order to pass the configurations to the workloads.
 reg_workload_configs()
 {
-    prog_message "Register workload configurations to anax."
+    prog_message "Set workload configurations to anax."
 
     # add services
     if [[ -z $WORKLOADS_TO_ADD ]]; then
@@ -618,9 +618,9 @@ reg_workload_configs()
             ret=$(echo "$wlconf" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/workloadconfig")
 
             if check_status_code "$ret" 201; then
-                status_message "Workload configuration $workload registered in anax."
+                status_message "Workload configuration $workload set in anax."
             else
-                status_message "Failed to rggister worload configuration $workload in anax. " $(get_message "$ret")
+                status_message "Failed to set worload configuration $workload in anax. " $(get_message "$ret")
                 return $RC_FAILED_POST_WORKLOAD_CONFIG_ANAX
             fi
         done

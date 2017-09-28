@@ -1,5 +1,6 @@
 {
   "workload_url": "https://bluehorizon.network/workloads/sdr",
+  "organization": "IBM",
   "workload_version": "2.1",
   "variables": {
   }

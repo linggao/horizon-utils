@@ -1,5 +1,6 @@
 {
   "workload_url": "https://bluehorizon.network/workloads/citygram",
+  "organization": "IBM",
   "workload_version": "1.2",
   "variables": {
         "HZN_CG_EMAIL": "$CITYGRAM_CG_EMAIL",

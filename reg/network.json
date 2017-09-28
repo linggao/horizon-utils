@@ -1,6 +1,7 @@
 {
   "sensor_url": "https://bluehorizon.network/microservices/network",
   "sensor_name": "network",
+  "sensor_org": "IBM",
   "sensor_version": "1.0.0",
   "auto_upgrade": true,
   "active_upgrade": true,

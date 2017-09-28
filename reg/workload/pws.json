@@ -1,5 +1,6 @@
 {
   "workload_url": "https://bluehorizon.network/workloads/pws",
+  "organization": "IBM",
   "workload_version": "1.8",
   "variables": {
       "HZN_WUGNAME": "$PWS_WUGNAME",
