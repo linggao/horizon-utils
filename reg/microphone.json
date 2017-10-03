@@ -1,0 +1,20 @@
+{
+  "sensor_url": "https://bluehorizon.network/microservices/microphone",
+  "sensor_name": "microphone",
+  "sensor_org": "IBM",
+  "sensor_version": "0.0.2",
+  "auto_upgrade": true,
+  "active_upgrade": true,
+  "attributes": [
+    {
+      "type": "ComputeAttributes",
+      "label": "microphone microservice",
+      "publishable": true,
+      "host_only": false,
+      "mappings": {
+        "ram": 128,
+        "cpus": 1
+      }
+    }
+  ]
+}
