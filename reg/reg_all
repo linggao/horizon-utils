@@ -187,7 +187,7 @@ check_cred()
 #####
 # This function checks if the user exists or not. 
 check_user() {
-    ENCODED_AUTH=$( echo ${ORGANIZATION}/${USER}:${PASSWORD} | base64 )
+    ENCODED_AUTH=$( echo -n ${ORGANIZATION}/${USER}:${PASSWORD} | base64 )
     debug_message "AUTH=${ORGANIZATION}/${USER}:${PASSWORD} encoded"
 
     # check if the user existes or not
@@ -213,7 +213,7 @@ reg_user() {
         exit $RC_ENV_NOT_DEFINED_OR_BAD
     fi
 
-    ENCODED_AUTH=$( echo root/root:${ROOT_PASSWORD} | base64 )
+    ENCODED_AUTH=$( echo -n root/root:${ROOT_PASSWORD} | base64 )
     debug_message "AUTH=root/root:${ROOT_PASSWORD} encoded"
 
     read -d '' user <<EOF
@@ -237,7 +237,7 @@ EOF
 # This function checks if the given device id/token are defined in the exchange or not.
 check_device_cred() 
 {
-    ENCODED_AUTH=$( echo ${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} | base64 )
+    ENCODED_AUTH=$( echo -n ${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} | base64 )
     debug_message "AUTH=${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} encoded"
 
     # check if the device existes or not
@@ -273,11 +273,11 @@ reg_device_to_exchange()
     # otherwise user device id/token credential.
     user_cred=0 
     if [[ -n $USER ]] && [[ -n $PASSWORD ]]; then
-        ENCODED_AUTH=$( echo ${ORGANIZATION}/${USER}:${PASSWORD} | base64 )
+        ENCODED_AUTH=$( echo -n ${ORGANIZATION}/${USER}:${PASSWORD} | base64 )
         debug_message "AUTH=${ORGANIZATION}/${USER}:${PASSWORD} encoded"
         user_cred=1
     else
-        ENCODED_AUTH=$( echo ${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} | base64 )
+        ENCODED_AUTH=$( echo -n ${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} | base64 )
         debug_message "AUTH=${ORGANIZATION}/${DEVICE_ID}:${DEVICE_TOKEN} encoded"
     fi         
 
