@@ -1,11 +1,5 @@
 env_vars
 reg_all
-common.json
-common_sample.json
-airpollutionms.json
-citygramms.json
-cpu.json
-gps.json
-network.json
-pwsms.json
-rtlsdr.json
+microservice
+workload
+examples

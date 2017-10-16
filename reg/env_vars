@@ -5,31 +5,43 @@
 
 
 ###################################################################
-# organization and pattern
+# organization
 ###################################################################
 # required, the organization the user and device belong to
 export ORGANIZATION=
 
-# optional, the name of the pattern that will be run on the device
-export PATTERN=
 
 ###################################################################
-# user
+# user and device
 ###################################################################
 # optional, if omitted DEVICE_ID and DEVICE_TOKEN must be filled 
 # and the device must have been created on the exchange 
 export USER=
 export PASSWORD=
 
-
-####################################################################
-# device
-####################################################################
 # optional. If omitted the USER and PASSWORD must be filled.
 # If not set the default device id will be used and a token will be created by reg_all script.
 DEVICE_ID=
 DEVICE_TOKEN=
 
+#################################################################### 
+### patterns and services
+####################################################################
+# optional, the name of the pattern that will be run on the device. 
+export PATTERN=
+
+# a comma seperated microservice file names to be registered. (gps,network,rtlsdr,pwsms,citygramms,airpollutionms)
+# optional if the PATTERN is filled and the microservices within the pattern can take the default settings.
+export SERVICES="gps,network,rtlsdr"
+
+# a comma seperated list of workload configuration file names to be posted. (location,netspeed,sdr,pws,citygram,airpollution)
+# optional if the PATTERN is filled and the workloads within the pattern can take the default settings.
+export WORKLOAD_CONFIGS="location,netspeed,sdr"
+
+
+####################################################################
+#  common attributes
+####################################################################
 # optional, these variables will be auto filled if you do not define them here.
 # if you want to fill them manually, you can go to http://www.latlong.net/ to find your gps location
 export LAT=
@@ -42,17 +54,9 @@ export USE_GPS="false"
 # If true, please specify partnerID as ["device_id1", "device_id2"] in common.json file 
 export HA_DEVICE="false"
 
-
-#################################################################### 
-### service
-####################################################################
-
-# a comma seperated microservice file names to be registered. (gps,network,rtlsdr,pwsms,citygramms,airpollutionms)
-export SERVICES="gps,network,rtlsdr"
-
-# a comma seperated list of workload configuration file names to be posted. (location,netspeed,sdr,pws,citygram,airpollution)
-export WORKLOAD_CONFIGS="location,netspeed,sdr"
-
+###################################################################
+# variable values for microservices and workloads json files
+###################################################################
 
 ### netspeed service related settings
 # the server for testing netspeed. (closest, fastest, random)

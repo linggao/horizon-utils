@@ -2,9 +2,7 @@
   "sensor_url": "https://bluehorizon.network/microservices/citygramms",
   "sensor_name": "citygramms",
   "sensor_org": "IBM",
-  "sensor_version": "1.0.0",
-  "auto_upgrade": true,
-  "active_upgrade": true,
+  "sensor_version": "[0.0.0,INFINITY)",
   "attributes": [
     {
       "type": "ComputeAttributes",

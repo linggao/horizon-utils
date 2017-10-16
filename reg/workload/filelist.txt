@@ -1,7 +1,9 @@
 airpollution.json
+aural.json
 citygram.json
 location.json
 netspeed.json
 pws.json
 sdr.json
 sysstats.json
+

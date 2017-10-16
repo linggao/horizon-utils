@@ -1,0 +1,8 @@
+{
+  "sensor_url": "https://bluehorizon.network/microservices/cpu",
+  "sensor_name": "cpu",
+  "sensor_org": "IBM",
+  "sensor_version": "[0.0.0,INFINITY)",
+  "attributes": [
+  ]
+}

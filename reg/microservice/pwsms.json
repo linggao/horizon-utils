@@ -2,20 +2,8 @@
   "sensor_url": "https://bluehorizon.network/microservices/pwsms",
   "sensor_name": "pwsms",
   "sensor_org": "IBM",
-  "sensor_version": "1.0.0",
-  "auto_upgrade": true,
-  "active_upgrade": true,
+  "sensor_version": "[0.0.0,INFINITY)",
   "attributes": [
-    {
-      "type": "ComputeAttributes",
-      "label": "Personal Weather Station",
-      "publishable": true,
-      "host_only": false,
-      "mappings": {
-        "ram": 128,
-        "cpus": 1
-      }
-    },
     {
       "type": "MappedAttributes",
       "label": "app",

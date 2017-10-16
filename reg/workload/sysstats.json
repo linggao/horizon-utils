@@ -1,7 +1,7 @@
 {
   "workload_url": "https://bluehorizon.network/workloads/sysstats",
   "organization": "IBM",
-  "workload_version": "1.2.1",
+  "workload_version": "[0.0.0,INFINITY)",
   "variables": {
   }
 }

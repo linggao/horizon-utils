@@ -1,11 +1,22 @@
 [
     {
-        "type": "MappedAttributes",
+        "type": "AgreementProtocolAttributes",
+        "label": "Agreement Protocol",
+        "publishable": true,
+        "host_only": false,
+        "mappings": {
+            "protocols": [
+              {"Basic":[]}
+            ]
+        }
+    },
+    {
+        "type": "MeteringAttributes",
         "label": "Metering Policy",
         "publishable": true,
         "host_only": false,
         "mappings": {
-            "tokens": 2,
+            "tokens": 1,
             "perTimeUnit": "hour",
             "notificationInterval": 300
         }
@@ -39,6 +50,19 @@
         "host_only": false,
         "mappings": {
             "partnerID": ["device_id1", "device_id2"]
+        }
+    },
+    {
+        "type": "HTTPSBasicAuthAttributes",
+        "label": "Authentication for https://mycompany.com/api/horizon/images",
+        "sensor_urls": [
+        "https://mycompany.com/api/horizon/images"
+        ],
+        "publishable": false,
+        "host_only": true,
+        "mappings": {
+            "password": "MYPASSWORDVALUE",
+            "username": "MYUSERNAMEVALUE"
         }
     }
 ]

@@ -1,7 +1,7 @@
 {
   "workload_url": "https://bluehorizon.network/workloads/netspeed",
   "organization": "IBM",
-  "workload_version": "2.5",
+  "workload_version": "[0.0.0,INFINITY)",
   "variables": {
     "HZN_TARGET_SERVER": "$NETSPEED_TARGET_SERVER"
   }

@@ -35,6 +35,7 @@ RC_FAILED_DELETE_WORKLOAD_CONFIG_ANAX=117
 RC_USER_NOT_EXIST=118
 RC_DEVICE_NOT_EXIST=119
 RC_FAILED_DELETE_AGREEMENT_EXCH=120
+RC_FAILED_CHANGE_CONFIG_STATE=121
 
 RC_REREG_NOT_SUPPORT_DEVICE_CHANGE=130
 RC_NOT_SUPPORT_DEVICE_CHANGE=131
@@ -415,33 +416,6 @@ reg_commom_attribute()
 }
 
 
-####
-# This function registers the location service.
-reg_location_microservice()
-{
-    # do not need this if it is second or more time running the script
-    if [[ $REREG -eq 1 ]]; then
-        return $RC_SUCCESS
-    fi
-
-    prog_message "Register location service to anax."
-    file_name="$SCRIPT_DIR/location.json"
-
-    service_reg=$(envsubst < $file_name)
- 
-    debug_message "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
-    ret=$(echo "$service_reg" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
-    if check_status_code "$ret" 201; then
-        status_message "location service registered."
-    else
-        status_message "Failed to register location services. " $(get_message "$ret")
-        return $RC_FAILED_REG_SERVICE_ANAX
-    fi
-  
-    return $RC_SUCCESS
-}
-
-
 #####
 # This furncion appends the given service to the given service queue. It will make sure no duplication.
 append_service()
@@ -488,7 +462,7 @@ get_all_microservices()
     needed_svcs=""
     for svc in $(echo $SERVICES | sed "s/,/ /g")
     do
-        file_name="$SCRIPT_DIR/$svc.json"
+        file_name="$SCRIPT_DIR/microservice/$svc.json"
         if [ ! -f $file_name ]; then
             status_message "Error: File $file_name does not exist."
             continue
@@ -531,7 +505,7 @@ reg_microservices()
     else
         # register services one by one
         for service in $(echo $SERVICES_TO_ADD | tr "," " "); do
-            service_reg=$(envsubst < "$SCRIPT_DIR/$service.json")
+            service_reg=$(envsubst < "$SCRIPT_DIR/microservice/$service.json")
 
             debug_message "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
             ret=$(echo "$service_reg" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
@@ -740,14 +714,45 @@ reg_microservice_common_attributes()
             fi
         done
     else
-        debug_message "The file $fn does not exist."
+        debug_message "The file $fn does not exist, this means no need to overwrite the default."
     fi
 
     return $RC_SUCCESS
 }
 
+####
+# This function changes the confiration state.
+# If the state is changed to configured, then anax will notify the exchange for the registrations.
+change_config_state()
+{
+    state=$1
+    prog_message "Change the configuration state to $1."
 
+    case $state in
+        "configured")
+           ;;
+        *)
+            echo "anax does not support chaning the confiuration to $state"
+            return $RC_FAILED_CHANGE_CONFIG_STATE
+            ;;
+    esac
 
+    read -d '' newconfigstate <<EOF
+    {
+       "state": "configured"
+    }
+EOF
+    ret=$(echo "$newconfigstate" | curl -sS -X PUT $curlBasicArgs --data @- "$ANAX_API/horizondevice/configstate")       
+    if check_status_code "$ret" 201; then
+        status_message "Device configuration state changed to $state."
+        rc=$RC_SUCCESS
+    else
+        status_message "Failed to change the device configuration state to $state in anax: " $( get_message "$ret" )
+        rc=$RC_FAILED_CHANGE_CONFIG_STATE
+    fi
+
+    return $rc
+}
 
 ########################################################
 # Main program starts here
@@ -851,18 +856,23 @@ elif [ $HA_DEVICE == "true" ]; then
   run \"curl -s http://<ha_partner_ip>/horizendevice | jq '.id'\" to get a ha partner's id."
 fi
 
-# check if this is re-registration
+# get device id and check if this is re-registration
 debug_message "curl $curlBasicArgs \"$ANAX_API/horizondevice\""
 ret=$(curl $curlBasicArgs "$ANAX_API/horizondevice")
 if check_status_code "$ret" 200; then
-    REREG=1
-    device=$(echo $ret | jq '.id')
+    t=$(get_message "$ret" | jq '.organization')
+    if [[ "$t" != "null" ]]; then 
+        REREG=1
+    fi
+    device=$(get_message "$ret" | jq '.id')
     device=$(echo ${device//\"/}) # remove quotes
     if [[ -z $DEVICE_ID ]]; then
         DEVICE_ID=$device
-    elif [[ $DEVICE_ID != $device ]]; then
-        echo "Reregistration does not support chaning of device id (old: $device, new: $DEVICE_ID)."
-        exit $RC_NOT_SUPPORT_DEVICE_CHANGE
+    elif [[ $REREG -eq 1 ]]; then
+        if [[ $DEVICE_ID != $device ]]; then
+            echo "Reregistration does not support chaning of device id (old: $device, new: $DEVICE_ID)."
+            exit $RC_NOT_SUPPORT_DEVICE_CHANGE
+        fi
     fi
 else
     if [[ -z $DEVICE_ID ]]; then
@@ -907,20 +917,8 @@ if [[ $REREG -eq 0 ]]; then
     fi
     SERVICES_TO_ADD=$SERVICES
     SERVICES_TO_DEL=""
-else
-    # delete current workload configurations
-    delete_all_workload_configs
-
-    # go through all the service attributes and find the existing services
-    # and fill the SERVICES_TO_ADD and SERVICES_TO_DEL variables.
-    get_all_microservices
 fi
 
-WORKLOADS_TO_ADD=$WORKLOAD_CONFIGS
-
-
-# display env variables for verbose mode
-disp_env_vars
 
 # register device on exchange if needed
 reg_device_to_exchange
@@ -935,6 +933,20 @@ rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc
 fi
+
+if [[ $REREG -ne 0 ]]; then
+    # delete current workload configurations
+    delete_all_workload_configs
+
+    # go through all the service attributes and find the existing services
+    # and fill the SERVICES_TO_ADD and SERVICES_TO_DEL variables.
+    get_all_microservices
+fi
+
+WORKLOADS_TO_ADD=$WORKLOAD_CONFIGS
+
+# display env variables for verbose mode
+disp_env_vars
 
 # register location attributes for all services
 set_latlon
@@ -959,6 +971,13 @@ fi
 
 # register services defined in the SERVICES env variable
 reg_microservices
+rc=$?
+if [ $rc != $RC_SUCCESS ]; then
+    exit $rc
+fi
+
+# commit all the regs
+change_config_state configured
 rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc
