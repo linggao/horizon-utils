@@ -32,11 +32,11 @@ export PATTERN=
 
 # a comma seperated microservice file names to be registered. (gps,network,rtlsdr,pwsms,citygramms,airpollutionms)
 # optional if the PATTERN is filled and the microservices within the pattern can take the default settings.
-export SERVICES="gps,network,rtlsdr"
+export SERVICES=
 
 # a comma seperated list of workload configuration file names to be posted. (location,netspeed,sdr,pws,citygram,airpollution)
 # optional if the PATTERN is filled and the workloads within the pattern can take the default settings.
-export WORKLOAD_CONFIGS="location,netspeed,sdr"
+export WORKLOAD_CONFIGS=
 
 
 ####################################################################
