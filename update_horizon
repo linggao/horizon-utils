@@ -1,9 +1,14 @@
 #!/bin/bash
 
-#  This script removes the currently running bluehorizon snap, cleans the env associated 
-#  with it. It then loads the latest verson of the bluehorizon snap. If you want to supply
-#  a local snap, please input a fully qualified snap path (with name) to the command. 
-#  If no snap name and path is supplied, the script will go to the Ubuntu store to download the latest snap.
+#  This script removes the currently running horizon, cleans the env associated
+#  with it. It then loads the latest verson of the horizon. It supports both
+#  horizon deb packages and horizon snaps.
+#
+#  For bluehorizon snap support: If you want to supply a local snap,
+#      please input a fully qualified snap path (with name) to the command.
+#      If no snap name and path is supplied, the script will go to the Ubuntu store
+#      to download the latest snap.
+#
 #  Usage:
 #     update_horizon [snap_path]
 
@@ -17,17 +22,15 @@ curlBasicArgs="-s -w %{http_code} -H Accept:application/json"
 RC_SUCCESS=0
 RC_FAILED_REMOVE_SNAP=180
 RC_FAILED_INSTALL_SNAP=181
-RC_NO_DEVICE_ID=182
 RC_FAILED_STOP_HORIZON_SERVICE=183
 RC_FAILED_START_HORIZON_SERVICE=184
 RC_FAILED_UPGRADE_HORIZON_PKG=185
-RC_FAILED_REMOVE_DEVICE_FROM_EXCHANGE=186
 
 
 #####
 # This function parses the first parameter which is a json structure + a number.
 # It matches the number with the second parameter. The function reterns true if
-# the two numbers qual, otherwise false.
+# the two numbers equal, otherwise false.
 check_status_code() 
 {
   http_ret=$1
@@ -121,41 +124,10 @@ clean_horizon_deb() {
     fi
 
     # clean the db and other runtime generated files
+    # these are default locations
     rm -f /var/horizon/*.db
     rm -Rf /etc/horizon/policy.d/*
-}
-
-#####
-# This function removes the device from the exchange
-remove_device() {
-    echo "*Delete the device $DEVICE_ID from the exchange"
-    reg_dir=$(dirname "$(readlink -f "$0")")
-
-    if [[ -z $DEVICE_ID ]] || [[ -z $EXCH ]]; then
-        echo "DEVICE_ID or EXCH is not set."
-        return $RC_FAILED_REMOVE_DEVICE_FROM_EXCHANGE
-    fi 
-
-    if [[ -z $USER ]] || [[ -z $PASSWORD ]]; then
-        echo "Please make sure USER and PASSWORD are defined in $reg_dir/env_vars file in order to delete the device from the exchange."
-        return $RC_FAILED_REMOVE_DEVICE_FROM_EXCHANGE
-    fi 
-
-    # check if the device exists on the exchange
-    ret=$(curl -X GET $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
-    if check_status_code "$ret" 200; then
-        echo "device $DEVICE_ID exists on the exchange, will delete it."
-        ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${USER}:${PASSWORD}" "$EXCH/devices/${DEVICE_ID}")
-        if ! check_status_code "$ret" 204; then
-            echo "failed to delete the device $DEVICE_ID from the exchange. " $(get_message "$ret")
-            return $RC_FAILED_REMOVE_DEVICE_FROM_EXCHANGE
-        else
-            echo "device $DEVICE_ID deleted from the exchange"
-        fi
-    else
-        echo "device $DEVICE_ID does not exists on the exchange."
-    fi
-    return $RC_SUCCESS
+    rm -Rf /var/horizon/userkeys/*
 }
 
 #####
@@ -215,42 +187,6 @@ update_horizon_deb() {
     fi
 }
 
-#####
-# This function gets the device id
-get_device_id() {
-    pidof anax > /dev/null
-    if [[ $? -ne 0 ]]; then  
-        # get device id from the device id file when anax is not running.
-        if [ $USE_SNAP -eq 1 ]; then # for snap
-            if [ -f "/var/snap/bluehorizon/common/config/device_id" ]; then
-                DEVICE_ID=$(cat "/var/snap/bluehorizon/common/config/device_id")  
-            elif [ -f "/var/horizon/config/device_id" ]; then
-                DEVICE_ID=$(cat "/var/horizon/config/device_id")
-            else
-                # TODO: create device_id file.
-                echo "please specify /var/horizon/config/device_id file. "
-                return $RC_NO_DEVICE_ID
-            fi
-        else # for deb 
-            if [ -f "/etc/default/horizon" ]; then
-                ret=$(grep CMTN_DEVICE_ID /etc/default/horizon-env)
-                if [ $? -eq 0 ]; then
-                    DEVICE_ID=$(echo $ret |  sed s'/CMTN_DEVICE_ID=\(.*\)$/\1/')
-                fi
-            elif [ -f "/etc/default/horizon-env" ]; then
-                ret=$(grep CMTN_DEVICE_ID /etc/default/horizon-env)
-                if [ $? -eq 0 ]; then
-                    DEVICE_ID=$(echo $ret |  sed s'/CMTN_DEVICE_ID=\(.*\)$/\1/')
-                fi
-            fi
-        fi
-    else
-        # get the DEVICE_ID from anax if it is running.
-        DEVICE_ID=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_DEVICE_ID |sed 's/CMTN_DEVICE_ID=//')
-    fi
-}
-
-
 
 ### The main program starts here
 USE_SNAP=1
@@ -274,39 +210,6 @@ fi
 # Global variables
 ANAX_API="http://localhost:$ANAX_API_PORT"
 
-if [[ $VERBOSE -eq 1 ]]; then
-    echo "curl $curlBasicArgs \"$ANAX_API/status\""
-fi
-ret=$(curl $curlBasicArgs "$ANAX_API/status")
-
-if ! check_status_code "$ret" 200; then
-    echo "Failed to get status from anax. " $(get_message "$ret")
-fi
-EXCH=$(get_message "$ret" | jq '.configuration.exchange_api')
-
-if [ "$EXCH" == "" ]; then
-    if [ $USE_SNAP -eq 1 ]; then
-        EXCH=$(cat /proc/$(pidof anax)/environ | tr '\0' '\n' | grep CMTN_EXCHANGE_URL |sed 's/CMTN_EXCHANGE_URL=//')
-    else
-        EXCH=$(cat /etc/default/horizon | grep HZN_EXCHANGE_URL |sed 's/HZN_EXCHANGE_URL=//')
-        if [ "$EXCH" == "" ]; then
-            EXCH=$(cat /etc/horizon/anax.json |jq '.Edge.ExchangeURL')
-        fi
-    fi
-fi
-if [ "$EXCH" == "" ]; then
-    echo "Unable to get the exchange url"
-    return
-fi
-EXCH=$(echo ${EXCH//\"/}) # remove quotes
-EXCH=${EXCH%/} # remove the last slash if it has one
-
-# get device id
-if [[ -z $DEVICE_ID ]]; then
-    get_device_id
-fi
-echo "DEVICE_ID=$DEVICE_ID"
-
 # remove the workloads
 remove_workloads
 
@@ -322,10 +225,6 @@ rc=$?
 if [ $rc != $RC_SUCCESS ]; then
     exit $rc
 fi
-
-
-# remove the device from the exchange
-# remove_device
 
 # update and restart
 if [ $USE_SNAP -eq 1 ]; then

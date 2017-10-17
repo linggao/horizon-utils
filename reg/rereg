@@ -1,0 +1,231 @@
+#!/bin/bash
+
+#  This script removes the currently running horizon, cleans the env associated 
+#  with it. It then restarts it with current settings and reregisters the pattern
+#  and/or microservices. 
+#  Usage:
+#     rereg -h
+#     rereg -f env_vars_fn  (-f specifies the envionmental variable file name)
+#     rereg   (use the default environmental variable file /var/horizon/reg/env_vars)
+#
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+content="-H Content-Type:application/json"
+curlBasicArgs="-s -w %{http_code} -H Accept:application/json"
+
+# return code
+RC_SUCCESS=0
+RC_BAD_PARAM=150
+RC_ANAX_IS_NOT_RUNNING=151
+RC_FAILED_TO_CLEAN_WORKLOADS=152
+RC_FAILED_STOP_HORIZON_SERVICE=153
+RC_FAILED_START_HORIZON_SERVICE=154
+
+
+#####
+# This function displays the usage for this command
+usage()
+{
+    echo "Usage: rereg [-f env_vars_fn]
+
+Restarts the horizon service, cleans up the previous running data and reregisters
+your horizon device, and the patterns/services you want it to run. 
+
+Options:
+   -f <env_vars_fn>  A file containing the environmental variables that rereg
+                     should use. The default is /var/horizon/reg/env_vars.
+                     You must update this file with correct information before 
+                     running this command.
+    "
+}
+
+#####
+# This function parses the first parameter which is a json structure + a number.
+# It matches the number with the second parameter. The function reterns true if
+# the two numbers equal, otherwise false.
+check_status_code() 
+{
+  http_ret=$1
+  exp_code=$2
+
+  rc=$(echo $http_ret | sed 's/.*}\([0-9]*\)$/\1/')
+  if [[ $VERBOSE -eq 1 ]]; then
+    echo "[D] $rc,$exp_code"
+  fi
+  if [ $rc -eq $exp_code ]; then
+    return 0 # 0 = true
+  else
+    return 1 # 1 = false
+  fi
+}
+
+#####
+# This function returns parses the input string which is a json + number. 
+# It returns the json part.
+get_message()
+{
+  msg=`echo $1 | sed 's/\(.*}\)\([0-9]*\)$/\1/'`
+  echo $msg
+}
+
+#####
+# This function removes all the docker containers for the workloads.
+remove_workloads() {
+    echo "Remove workload containers from docker."
+    # make sure anax is running
+    pidof anax > /dev/null
+    if [[ $? -ne 0 ]]; then
+        echo "....anax is not running."
+        return $RC_FAILED_TO_CLEAN_WORKLOADS
+    fi
+
+    # get the workload from anax
+    ret=$(curl -X GET $curlBasicArgs "$ANAX_API/workload")
+    if ! check_status_code "$ret" 200; then
+        echo "....Failed to get the workloads from the anax api." $(get_message "$ret")
+        return $RC_FAILED_TO_CLEAN_WORKLOADS
+    fi
+
+    # remove the docker containers associated with the workload
+    names=$(get_message "$ret" | jq '.workloads[].Names[]')
+    if [[ $VERBOSE -eq 1 ]]; then
+        echo "[D] workload names: $names"
+    fi
+
+    if [ -n "$names" ]; then
+        for workload in $names
+        do
+            workload=$(echo ${workload//\"/})
+            echo "Removing docker container ${workload:1}"
+            docker rm -f ${workload:1};
+            if [[ $? -ne 0 ]]; then
+                echo "....Failed to remove docker container ${workload:1}"
+            fi
+        done
+    fi
+    return $RC_SUCCESS
+}
+
+####
+# This function check the anax http server. Tt returns true
+# when the server is ready, otherwise false
+anax_http_server_up() {
+     if [[ $VERBOSE -eq 1 ]]; then
+        echo "[D] curl $curlBasicArgs \"$ANAX_API/status\""
+    fi
+    ret=$(curl $curlBasicArgs "$ANAX_API/status")
+
+    if ! check_status_code "$ret" 200; then
+        if [[ $VERBOSE -eq 1 ]]; then
+            echo "[D] Failed to get status from anax. " $(get_message "$ret")
+            return $RC_ANAX_IS_NOT_RUNNING
+         fi
+    else
+        return $RC_SUCCESS
+    fi
+}
+
+########################################################
+# Main program starts here
+########################################################
+
+# save all the paremeters for later use
+ALL_PARAMES=$@
+
+# parse the parameters from the command line
+while getopts ":f:h" opt; do
+    case $opt in
+        h)
+            usage
+            exit 0
+            ;;
+        f)
+            env_vars_fn="$OPTARG"
+            ;;
+        *)
+            echo "Invalid option: -$OPTARG"
+            usage
+            exit $RC_BAD_PARAM
+            ;;
+    esac
+done
+
+# handle the case like "rereg fn".
+if [[ $OPTIND -eq 1 ]]  && [[ $# -gt 0 ]]; then
+    echo "Invalid argument: $@"
+    usage
+    exit $RC_BAD_PARAM
+fi
+
+# set up environmental variables
+if [[ -z "$env_vars_fn" ]]; then
+    ENV_VARS_FILE_NAME="/var/horizon/reg/env_vars"
+else
+    ENV_VARS_FILE_NAME=$env_vars_fn
+fi
+
+if [[ ! -f $ENV_VARS_FILE_NAME ]]; then 
+    echo "The file $ENV_VARS_FILE_NAME does not exist."
+    exit $RC_BAD_PARAM
+fi
+
+if [ -n "$ENV_VARS_FILE_NAME" ] && [ -f "$ENV_VARS_FILE_NAME" ]; then 
+    source $ENV_VARS_FILE_NAME
+fi
+
+# Global variables
+ANAX_API="http://localhost:$ANAX_API_PORT"
+
+# remove the workloads
+remove_workloads
+
+# stop the horizon service
+echo "Stop horizon service"
+ret=$(systemctl stop horizon.service 2>&1)
+if [[ $? -ne 0 ]]; then
+    echo "....Failed to stop horizon service: $ret"
+fi
+
+# clean the db and other runtime generated files
+rm -f /var/horizon/*.db
+rm -Rf /etc/horizon/policy.d/*
+
+# start the horizon service
+echo "Start horizon service"
+ret=$(systemctl start horizon.service 2>&1)
+if [[ $? -ne 0 ]]; then
+    echo "....Failed to start horizon service. $ret"
+    exit $RC_FAILED_START_HORIZON_SERVICE
+fi
+
+# wait for anax is up and running
+echo "Wait for anax to be ready"
+wait_interval=3
+wait_timeout=120
+ts_begin=$(date +"%s")
+while true; do
+    anax_http_server_up
+    if [ $? -eq $RC_SUCCESS ]; then
+        break
+    fi
+    
+    ts_now=$(date +"%s")
+    let interval=$ts_now-$ts_begin
+    if [ $interval -gt $wait_timeout ]; then
+        echo "....Timeout waiting for anax to be ready."
+    else
+        sleep $wait_interval
+    fi
+done
+echo "....anax is ready."
+
+# reregister
+$SCRIPT_DIR/reg_all -f $ENV_VARS_FILE_NAME
+exit $?
+
+
+
+
+
+
