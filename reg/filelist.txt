@@ -1,5 +1,6 @@
 env_vars
 reg_all
+rereg
 microservice
 workload
 examples
