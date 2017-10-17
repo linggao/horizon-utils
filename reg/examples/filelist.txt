@@ -1,5 +1,4 @@
 common.json
-common.json.sample
 pws.json
 pwsms.json
 

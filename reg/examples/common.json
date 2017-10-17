@@ -16,9 +16,9 @@
         "publishable": true,
         "host_only": false,
         "mappings": {
-            "tokens": 0,
-            "perTimeUnit": "",
-            "notificationInterval": 0
+            "tokens": 1,
+            "perTimeUnit": "hour",
+            "notificationInterval": 300
         }
     },
     {
@@ -27,6 +27,7 @@
         "publishable": true,
         "host_only": false,
         "mappings": {
+            "mykey1":true
         }
     },
     {
@@ -36,6 +37,9 @@
         "host_only": false,
         "mappings": {
             "expression": {
+                "and": [
+                    {"name":"mykey1", "op":"=", "value":true}
+                ]
             }
         }
     },
@@ -45,7 +49,20 @@
         "publishable": false,
         "host_only": false,
         "mappings": {
-            "partnerID": []
+            "partnerID": ["device_id1", "device_id2"]
+        }
+    },
+    {
+        "type": "HTTPSBasicAuthAttributes",
+        "label": "Authentication for https://mycompany.com/api/horizon/images",
+        "sensor_urls": [
+        "https://mycompany.com/api/horizon/images"
+        ],
+        "publishable": false,
+        "host_only": true,
+        "mappings": {
+            "password": "MYPASSWORDVALUE",
+            "username": "MYUSERNAMEVALUE"
         }
     }
 ]
