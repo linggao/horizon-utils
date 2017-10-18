@@ -304,19 +304,6 @@ reg_device_to_exchange()
                 return $RC_USER_MISMATCH
             fi
         fi
-
-        # remove the agreements associated with the device from the exchange
-        if [[ $REREG -eq 0 ]]; then
-            prog_message "Delete associated agreements for device $DEVICE_ID from the exchange."
-            debug_message "curl -X DELETE $curlBasicArgs -H \"Authorization:Basic ${ENCODED_AUTH}\" \"$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}/agreements\""
-            ret=$(curl -X DELETE $curlBasicArgs -H "Authorization:Basic ${ENCODED_AUTH}" "$EXCH/orgs/${ORGANIZATION}/nodes/${DEVICE_ID}/agreements")
-            if check_status_code "$ret" 204 || check_status_code "$ret" 404; then
-                status_message "Agreements deleted."
-            else
-                status_message "Failed to delete agreements for device $DEVICE_ID from the exchange. " $(get_message "$ret")
-                return $RC_FAILED_DELETE_AGREEMENT_EXCH
-            fi
-        fi
     fi
 
     # device does not exist
