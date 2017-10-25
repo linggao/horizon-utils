@@ -23,9 +23,7 @@
       "host_only": false,
       "mappings": {
         "HZN_PWS_MODEL": "$PWS_MODEL",
-        "MTN_PWS_MODEL": "$PWS_MODEL",
-        "HZN_PWS_ST_TYPE": "$PWS_ST_TYPE",
-        "MTN_PWS_ST_TYPE": "$PWS_ST_TYPE"
+        "HZN_PWS_ST_TYPE": "$PWS_ST_TYPE"
       }
     }
   ]
