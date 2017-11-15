@@ -47,6 +47,9 @@ export WORKLOAD_CONFIGS=
 export LAT=
 export LON=
 
+# how far off in km the dot on the map is from the LAT and LON values. 
+export LOCATION_ACCURACY_KM=0.0
+
 # has a GPS attached to the device and want to use it for location. (true, false)
 export USE_GPS="false"
 

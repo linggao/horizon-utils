@@ -623,9 +623,9 @@ set_latlon()
         "publishable": false,
         "host_only": false,
         "mappings": {
-            "lat": "$LAT",
-            "lon": "$LON",
-            "user_provided_coords": true,
+            "lat": $LAT,
+            "lon": $LON,
+            "location_accuracy_km": $LOCATION_ACCURACY_KM,
             "use_gps": $USE_GPS
         }
     }
