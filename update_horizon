@@ -173,7 +173,7 @@ install_snap() {
 # This function updates the deb packages and starts the horizon service with current configuration
 update_horizon_deb() {
     apt-get update
-    apt-get install --only-upgrade -y horizon bluehorizon
+    apt-get install --only-upgrade -y horizon bluehorizon bluehorizon-ui
     if [[ $? -ne 0 ]]; then
         echo "Failed to upgrade horizon packages."
         return $RC_FAILED_STOP_HORIZON_SERVICE
