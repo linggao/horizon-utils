@@ -2,9 +2,17 @@
   "workload_url": "https://bluehorizon.network/workloads/pws",
   "organization": "IBM",
   "workload_version": "[0.0.0,INFINITY)",
-  "variables": {
-      "HZN_WUGNAME": "$PWS_WUGNAME",
-      "HZN_PWS_MODEL": "$PWS_MODEL"
-  }
+  	"attributes": [
+      {
+      	"type": "UserInputAttributes",
+      	"label": "User input variables",
+      	"publishable": false,
+      	"host_only": false,
+      	"mappings": {
+      		"HZN_WUGNAME": "$PWS_WUGNAME",
+      		"HZN_PWS_MODEL": "$PWS_MODEL"
+      	}
+      }
+   ]
 }
 

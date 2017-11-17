@@ -2,7 +2,15 @@
   "workload_url": "https://bluehorizon.network/workloads/location",
   "organization": "IBM",
   "workload_version": "[0.0.0,INFINITY)",
-  "variables": {
-  }
+  "attributes": [
+    {
+      "type": "UserInputAttributes",
+      "label": "User input variables",
+      "publishable": false,
+      "host_only": false,
+      "mappings": {
+      }
+    }
+  ]
 }
 

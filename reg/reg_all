@@ -346,7 +346,7 @@ EOF
 
 
 #####
-# This function calls anax /horizondevice api to save the new device id and token for the user accound. 
+# This function calls anax /node api to save the new device id and token for the user accound. 
 reg_device_to_anax()
 {
     if [[ $REREG -eq 0 ]]; then
@@ -357,7 +357,7 @@ reg_device_to_anax()
             return $RC_ENV_NOT_DEFINED_OR_BAD
         fi 
 
-        # create a new horizondevice account
+        # create a new  account
         read -d '' newhzndevice <<EOF
         {
             "id": "$DEVICE_ID",
@@ -365,11 +365,11 @@ reg_device_to_anax()
             "pattern": "$PATTERN",
             "name": "$DEVICE_NAME",
             "token": "$DEVICE_TOKEN",
-            "ha_device": $HA_DEVICE
+            "ha": $HA_DEVICE
         }
 EOF
-        debug_message "echo '$newhzndevice' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/horizondevice\""
-        ret=$(echo "$newhzndevice" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/horizondevice")
+        debug_message "echo '$newhzndevice' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/node\""
+        ret=$(echo "$newhzndevice" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/node")
         if check_status_code "$ret" 201; then
             status_message "Device registered in ananx."
             rc=$RC_SUCCESS
@@ -494,8 +494,8 @@ reg_microservices()
         for service in $(echo $SERVICES_TO_ADD | tr "," " "); do
             service_reg=$(envsubst < "$SCRIPT_DIR/microservice/$service.json")
 
-            debug_message "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/service\""
-            ret=$(echo "$service_reg" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/service")
+            debug_message "echo '$service_reg' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/microservice/config\""
+            ret=$(echo "$service_reg" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/microservice/config")
 
             if check_status_code "$ret" 201; then
                 status_message "$service service registered."
@@ -524,8 +524,8 @@ delete_all_workload_configs()
 {
     prog_message "Delete existing workload configurations from anax."
 
-    debug_message "curl $curlBasicArgs \"$ANAX_API/workloadconfig\""
-    ret=$(curl $curlBasicArgs "$ANAX_API/workloadconfig")
+    debug_message "curl $curlBasicArgs \"$ANAX_API/workload/config\""
+    ret=$(curl $curlBasicArgs "$ANAX_API/workload/config")
 
     # exit out if the api call fails
     if ! check_status_code "$ret" 200; then
@@ -543,8 +543,8 @@ delete_all_workload_configs()
     do
         body=$(echo "$resp" | jq -c ".active[$i]")
         name=$(basename $(echo $body | jq -c '.workload_url'))
-        debug_message "echo \"$body\"  | curl -X DELETE $curlBasicArgs --data @- \"$ANAX_API/workloadconfig\""
-        ret=$(echo "$body" | curl -X DELETE $curlBasicArgs --data @- "$ANAX_API/workloadconfig")
+        debug_message "echo \"$body\"  | curl -X DELETE $curlBasicArgs --data @- \"$ANAX_API/workload/config\""
+        ret=$(echo "$body" | curl -X DELETE $curlBasicArgs --data @- "$ANAX_API/workload/config")
 
         if check_status_code "$ret" 204; then
             status_message "Workload configuration $name deleted from anax."
@@ -575,8 +575,8 @@ reg_workload_configs()
         for workload in $(echo $WORKLOADS_TO_ADD | tr "," " "); do
             wlconf=$(envsubst < "$SCRIPT_DIR/workload/$workload.json")
 
-            debug_message "echo '$wlconf' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/workloadconfig\""
-            ret=$(echo "$wlconf" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/workloadconfig")
+            debug_message "echo '$wlconf' | curl -X POST $curlBasicArgs --data @- \"$ANAX_API/workload/config\""
+            ret=$(echo "$wlconf" | curl -X POST $curlBasicArgs --data @- "$ANAX_API/workload/config")
 
             if check_status_code "$ret" 201; then
                 status_message "Workload configuration $workload set in anax."
@@ -729,7 +729,7 @@ change_config_state()
        "state": "configured"
     }
 EOF
-    ret=$(echo "$newconfigstate" | curl -sS -X PUT $curlBasicArgs --data @- "$ANAX_API/horizondevice/configstate")       
+    ret=$(echo "$newconfigstate" | curl -sS -X PUT $curlBasicArgs --data @- "$ANAX_API/node/configstate")       
     if check_status_code "$ret" 201; then
         status_message "Device configuration state changed to $state."
         rc=$RC_SUCCESS
@@ -839,13 +839,13 @@ if [[ -z $HA_DEVICE ]]; then
     HA_DEVICE="false"
 elif [ $HA_DEVICE == "true" ]; then
     debug_message "Info: Please make sure partnerID is defined in $SCRIPT_DIR/common.json file for the 'ha' attribute because HA_DEVICE is \"true\".
-  You can use \"http://<ha_partner_ip>/horizondevice\" on the browser or 
-  run \"curl -s http://<ha_partner_ip>/horizendevice | jq '.id'\" to get a ha partner's id."
+  You can use \"http://<ha_partner_ip>/node\" on the browser or 
+  run \"curl -s http://<ha_partner_ip>/node | jq '.id'\" to get a ha partner's id."
 fi
 
 # get device id and check if this is re-registration
-debug_message "curl $curlBasicArgs \"$ANAX_API/horizondevice\""
-ret=$(curl $curlBasicArgs "$ANAX_API/horizondevice")
+debug_message "curl $curlBasicArgs \"$ANAX_API/node\""
+ret=$(curl $curlBasicArgs "$ANAX_API/node")
 if check_status_code "$ret" 200; then
     t=$(get_message "$ret" | jq '.organization')
     if [[ "$t" != "null" ]]; then 

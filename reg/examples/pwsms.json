@@ -17,8 +17,8 @@
       }
     },
     {
-      "type": "MappedAttributes",
-      "label": "app",
+      "type": "UserInputAttributes",
+      "label": "User input variables",
       "publishable": false,
       "host_only": false,
       "mappings": {

@@ -5,8 +5,8 @@
   "sensor_version": "[0.0.0,INFINITY)",
   "attributes": [
     {
-      "type": "MappedAttributes",
-      "label": "app",
+      "type": "UserInputAttributes",
+      "label": "User input variables",
       "publishable": false,
       "host_only": false,
       "mappings": {

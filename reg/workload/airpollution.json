@@ -2,9 +2,15 @@
   "workload_url": "https://bluehorizon.network/workloads/airpollution",
   "organization": "IBM",
   "workload_version": "[0.0.0,INFINITY)",
-  "variables": {
-    "HZN_PURPLE_AIR_SENSOR_NAME": "$AIRPOLLUTION_PURPLE_AIR_SENSOR_NAME"
-  }
+  "attributes": [
+    {
+      "type": "UserInputAttributes",
+      "label": "User input variables",
+      "publishable": false,
+      "host_only": false,
+      "mappings": {
+        "HZN_PURPLE_AIR_SENSOR_NAME": "$AIRPOLLUTION_PURPLE_AIR_SENSOR_NAME"
+      }
+    }
+  ]
 }
-
-
